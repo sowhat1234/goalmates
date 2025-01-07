@@ -1,0 +1,153 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid()) @map("_id")
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  leagues       League[]  @relation("LeagueOwner")
+  players       Player[]
+}
+
+model Account {
+  id                String  @id @default(cuid()) @map("_id")
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid()) @map("_id")
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model League {
+  id          String    @id @default(cuid()) @map("_id")
+  name        String
+  description String?
+  ownerId     String
+  owner       User      @relation("LeagueOwner", fields: [ownerId], references: [id])
+  seasons     Season[]
+  players     Player[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Season {
+  id        String    @id @default(cuid()) @map("_id")
+  name      String
+  leagueId  String
+  league    League    @relation(fields: [leagueId], references: [id])
+  fixtures  Fixture[]
+  startDate DateTime
+  endDate   DateTime
+  rules     Json?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Player {
+  id        String       @id @default(cuid()) @map("_id")
+  name      String
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id])
+  leagueId  String
+  league    League      @relation(fields: [leagueId], references: [id])
+  teams     PlayerTeam[]
+  events    Event[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model Fixture {
+  id        String   @id @default(cuid()) @map("_id")
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id])
+  date      DateTime
+  matches   Match[]
+  status    String   @default("NOT_STARTED") // Can be NOT_STARTED, IN_PROGRESS, or FINISHED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Match {
+  id            String   @id @default(cuid()) @map("_id")
+  fixtureId     String
+  fixture       Fixture  @relation(fields: [fixtureId], references: [id])
+  homeTeam      Team     @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam      Team     @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  waitingTeam   Team     @relation("WaitingTeam", fields: [waitingTeamId], references: [id])
+  homeTeamId    String
+  awayTeamId    String
+  waitingTeamId String
+  events        Event[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Team {
+  id            String       @id @default(cuid()) @map("_id")
+  name          String
+  color         String      @default("red")
+  players       PlayerTeam[]
+  homeMatches   Match[]     @relation("HomeTeam")
+  awayMatches   Match[]     @relation("AwayTeam")
+  waitingMatches Match[]    @relation("WaitingTeam")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Event {
+  id              String    @id @default(cuid()) @map("_id")
+  matchId         String
+  match           Match     @relation(fields: [matchId], references: [id])
+  playerId        String
+  player          Player    @relation(fields: [playerId], references: [id])
+  type            String    // Goal, Save, Miss, Card, etc.
+  subType         String?   // Penalty, Chip shot, etc.
+  isHighlight     Boolean   @default(false)
+  isWowMoment     Boolean   @default(false)
+  team            String    // Right or Left
+  note            String?
+  relatedPlayerId String?
+  timestamp       DateTime  @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PlayerTeam {
+  id        String   @id @default(cuid()) @map("_id")
+  playerId  String
+  teamId    String
+  player    Player   @relation(fields: [playerId], references: [id])
+  team      Team     @relation(fields: [teamId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([playerId, teamId])
+}
