@@ -22,12 +22,6 @@ export default function DashboardPage() {
       redirect('/api/auth/signin')
     },
   })
-
-  // Show loading state while session is loading
-  if (status === "loading") {
-    return <div className="text-center">Loading session...</div>
-  }
-
   const [isCreating, setIsCreating] = useState(false)
   const [leagueName, setLeagueName] = useState("")
   const [description, setDescription] = useState("")
@@ -37,6 +31,16 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchLeagues()
   }, [])
+
+  // Show loading state while session is loading
+  if (status === "loading") {
+    return <div className="text-center">Loading session...</div>
+  }
+
+  // Verify user is authenticated
+  if (!session?.user?.id) {
+    redirect('/api/auth/signin')
+  }
 
   const fetchLeagues = async () => {
     try {

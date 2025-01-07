@@ -54,15 +54,19 @@ export async function POST(
         fixtureId,
         homeTeamId: validatedData.homeTeamId,
         awayTeamId: validatedData.awayTeamId,
-        waitingTeamId: validatedData.waitingTeamId,
-        status: "IN_PROGRESS"
+        waitingTeamId: validatedData.waitingTeamId
       }
     })
 
     // Update the fixture with the new status and return it with all relationships
     const updatedFixture = await prisma.fixture.update({
       where: {
-        id: fixtureId
+        id: fixtureId,
+        matches: {
+          some: {
+            id: match.id
+          }
+        }
       },
       data: {
         status: "IN_PROGRESS"

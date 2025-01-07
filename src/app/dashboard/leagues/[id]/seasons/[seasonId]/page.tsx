@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 
@@ -104,11 +104,7 @@ export default function SeasonDetail() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"overview" | "fixtures" | "standings" | "stats">("overview")
 
-  useEffect(() => {
-    fetchSeason()
-  }, [])
-
-  const fetchSeason = async () => {
+  const fetchSeason = useCallback(async () => {
     try {
       const response = await fetch(`/api/leagues/${params.id}/seasons/${params.seasonId}`)
       if (!response.ok) {
@@ -122,7 +118,11 @@ export default function SeasonDetail() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [params.id, params.seasonId, setSeason, setError, setIsLoading])
+
+  useEffect(() => {
+    fetchSeason()
+  }, [fetchSeason])
 
   const handleDeleteSeason = async () => {
     if (!confirm("Are you sure you want to delete this season? This action cannot be undone and will delete all fixtures and matches associated with this season.")) {

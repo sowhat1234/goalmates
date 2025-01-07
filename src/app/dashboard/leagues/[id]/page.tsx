@@ -27,28 +27,32 @@ export default function LeagueDetail() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"overview" | "seasons" | "players">("overview")
 
-  const fetchLeague = async () => {
-    try {
-      const response = await fetch(`/api/leagues/${params.id}`)
-      if (!response.ok) {
-        throw new Error("Failed to fetch league")
-      }
-      const data = await response.json()
-      setLeague(data)
-    } catch (error) {
-      console.error("Error fetching league:", error)
-      setError(error instanceof Error ? error.message : "Failed to fetch league")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   useEffect(() => {
+    const fetchLeague = async () => {
+      try {
+        const response = await fetch(`/api/leagues/${params.id}`)
+        if (!response.ok) {
+          throw new Error("Failed to fetch league")
+        }
+        const data = await response.json()
+        setLeague(data)
+      } catch (error) {
+        console.error("Error fetching league:", error)
+        setError(error instanceof Error ? error.message : "Failed to fetch league")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
     fetchLeague()
-  }, [fetchLeague])
+  }, [params.id])
 
   if (isLoading) {
     return <div className="text-center">Loading...</div>
+  }
+
+  if (error) {
+    return <div className="text-center text-red-600">{error}</div>
   }
 
   if (!league) {

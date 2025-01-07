@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 
 const navigation = [
@@ -48,10 +49,12 @@ export default function DashboardLayout({
             </div>
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <img
+                <Image
                   className="h-8 w-8 rounded-full"
                   src={session?.user?.image || "https://avatar.vercel.sh/user"}
                   alt={session?.user?.name || "User"}
+                  width={32}
+                  height={32}
                 />
               </div>
             </div>

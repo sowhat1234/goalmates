@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 
@@ -29,12 +29,6 @@ export default function NewFixturePage({
       router.push('/api/auth/signin')
     },
   })
-
-  // Show loading state while session is loading
-  if (status === "loading") {
-    return <div className="text-center">Loading session...</div>
-  }
-
   const [date, setDate] = useState("")
   const [players, setPlayers] = useState<Player[]>([])
   const [teams, setTeams] = useState<Team[]>([
@@ -47,7 +41,7 @@ export default function NewFixturePage({
   const [error, setError] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
 
-  const fetchPlayers = async () => {
+  const fetchPlayers = useCallback(async () => {
     setPlayersLoading(true)
     setError(null)
     try {
@@ -64,11 +58,24 @@ export default function NewFixturePage({
     } finally {
       setPlayersLoading(false)
     }
-  }
+  }, [params.id, setPlayers, setPlayersLoading, setError])
 
   useEffect(() => {
-    fetchPlayers()
-  }, [params.id])
+    if (session?.user?.id) {
+      fetchPlayers()
+    }
+  }, [session?.user?.id, fetchPlayers])
+
+  // Show loading state while session is loading
+  if (status === "loading") {
+    return <div className="text-center">Loading session...</div>
+  }
+
+  // Verify user is authenticated
+  if (!session?.user?.id) {
+    router.push('/api/auth/signin')
+    return null
+  }
 
   const handleSeedPlayers = async () => {
     setSeeding(true)

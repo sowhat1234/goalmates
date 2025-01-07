@@ -133,7 +133,7 @@ export function FixtureClient({
         seconds: parsed.seconds,
         isRunning: parsed.isRunning
       };
-    } catch (e) {
+    } catch {
       return { minutes: 8, seconds: 0, isRunning: false };
     }
   });
@@ -170,7 +170,7 @@ export function FixtureClient({
   // Handle beforeunload event to save state
   useEffect(() => {
     const handleBeforeUnload = () => {
-    if (timer.isRunning) {
+      if (timer.isRunning) {
         localStorage.setItem(`fixture_timer_${fixtureId}`, JSON.stringify({
           ...timer,
           lastUpdated: new Date().toISOString()
@@ -194,7 +194,7 @@ export function FixtureClient({
     setIsOvertime(true);
   };
 
-  const handleWinningTeam = async (winningTeamId: string, losingTeamId: string) => {
+  const handleWinningTeam = useCallback(async (winningTeamId: string, losingTeamId: string) => {
     try {
       if (!fixture?.matches?.[0]) throw new Error("Match not found");
       const match = fixture.matches[0];
@@ -261,7 +261,7 @@ export function FixtureClient({
       console.error("Failed to rotate teams:", error);
       setError(error instanceof Error ? error.message : "Failed to rotate teams");
     }
-  };
+  }, [fixture, fixtureUrl, fixtureId, mutate]);
 
   const checkWinConditions = useCallback((homeTeamId: string, awayTeamId: string) => {
     if (!fixture?.matches?.[0]) return;
