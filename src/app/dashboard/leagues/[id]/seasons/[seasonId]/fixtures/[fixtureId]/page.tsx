@@ -89,14 +89,24 @@ async function getFixtureData(id: string, seasonId: string, fixtureId: string) {
   }
 }
 
+type PageParams = Promise<{
+  id: string
+  seasonId: string
+  fixtureId: string
+}>
+
 export default async function FixtureDetailPage({
   params
 }: {
-  params: { id: string; seasonId: string; fixtureId: string }
+  params: PageParams
 }) {
   try {
-    const resolvedParams = await Promise.resolve(params)
-    const fixture = await getFixtureData(resolvedParams.id, resolvedParams.seasonId, resolvedParams.fixtureId)
+    const resolvedParams = await params
+    const fixture = await getFixtureData(
+      resolvedParams.id,
+      resolvedParams.seasonId,
+      resolvedParams.fixtureId
+    )
 
     return (
       <div className="min-h-screen bg-gray-100">

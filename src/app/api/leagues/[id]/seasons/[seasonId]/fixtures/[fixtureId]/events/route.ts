@@ -1,26 +1,26 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
-import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
-const eventSchema = z.object({
-  type: z.enum([
-    "GOAL",
-    "ASSIST",
-    "SAVE",
-    "YELLOW_CARD",
-    "RED_CARD",
-    "WOW_MOMENT"
-  ]),
+type RouteParams = Promise<{
+  id: string
+  seasonId: string
+  fixtureId: string
+}>
+
+const createEventSchema = z.object({
+  type: z.enum(["GOAL", "ASSIST", "SAVE", "YELLOW_CARD", "RED_CARD", "WOW_MOMENT"]),
   playerId: z.string(),
   matchId: z.string(),
-  team: z.string()
+  timestamp: z.string().optional(),
+  team: z.string(),
 })
 
 export async function POST(
-  req: Request,
-  context: { params: { id: string; seasonId: string; fixtureId: string } }
+  request: Request,
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -29,19 +29,20 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const params = await Promise.resolve(context.params)
-    const { id, seasonId, fixtureId } = params
+    const params = await props.params
+    const { id: leagueId, seasonId, fixtureId } = params
 
+    // Verify the fixture exists and belongs to the user
     const fixture = await prisma.fixture.findFirst({
       where: {
         id: fixtureId,
         seasonId: seasonId,
         season: {
+          leagueId: leagueId,
           league: {
-            id: id,
-            ownerId: session.user.id,
-          },
-        },
+            ownerId: session.user.id
+          }
+        }
       },
       include: {
         matches: {
@@ -52,8 +53,8 @@ export async function POST(
                   include: {
                     player: true
                   }
-                },
-              },
+                }
+              }
             },
             awayTeam: {
               include: {
@@ -61,8 +62,8 @@ export async function POST(
                   include: {
                     player: true
                   }
-                },
-              },
+                }
+              }
             },
             waitingTeam: {
               include: {
@@ -70,53 +71,53 @@ export async function POST(
                   include: {
                     player: true
                   }
-                },
-              },
-            },
-            events: {
-              include: {
-                player: true,
-              },
-            },
-          },
-        },
-      },
+                }
+              }
+            }
+          }
+        }
+      }
     })
 
     if (!fixture) {
       return new NextResponse("Not Found", { status: 404 })
     }
 
-    const json = await req.json()
-    const validatedData = eventSchema.parse(json)
+    const json = await request.json()
+    const body = createEventSchema.parse(json)
 
-    // Verify that the player belongs to one of the teams in the match
-    const match = fixture.matches.find((m) => m.id === validatedData.matchId)
+    // Verify the match belongs to the fixture
+    const match = fixture.matches.find(m => m.id === body.matchId)
     if (!match) {
       return new NextResponse("Match not found", { status: 404 })
     }
 
-    // Verify that the player belongs to the specified team
-    const playerTeam = validatedData.team === match.homeTeam.id ? match.homeTeam
-      : validatedData.team === match.awayTeam.id ? match.awayTeam
-      : validatedData.team === match.waitingTeam.id ? match.waitingTeam
-      : null
+    // Verify the team belongs to the match
+    const team = body.team === match.homeTeam.id
+      ? match.homeTeam
+      : body.team === match.awayTeam.id
+        ? match.awayTeam
+        : body.team === match.waitingTeam.id
+          ? match.waitingTeam
+          : null
 
-    if (!playerTeam) {
-      return new NextResponse("Invalid team specified", { status: 400 })
+    if (!team) {
+      return new NextResponse("Team not found in match", { status: 404 })
     }
 
-    const playerInTeam = playerTeam.players.some(teamPlayer => teamPlayer.playerId === validatedData.playerId)
+    // Verify the player belongs to the specified team
+    const playerInTeam = team.players.some(p => p.playerId === body.playerId)
     if (!playerInTeam) {
-      return new NextResponse("Player not in specified team", { status: 400 })
+      return new NextResponse("Player not found in specified team", { status: 404 })
     }
 
     const event = await prisma.event.create({
       data: {
-        type: validatedData.type,
-        playerId: validatedData.playerId,
-        matchId: validatedData.matchId,
-        team: validatedData.team
+        type: body.type,
+        playerId: body.playerId,
+        matchId: body.matchId,
+        timestamp: body.timestamp ? new Date(body.timestamp) : new Date(),
+        team: body.team,
       },
       include: {
         player: true,
@@ -125,17 +126,18 @@ export async function POST(
 
     return NextResponse.json(event)
   } catch (error) {
-    console.error("Error in POST /events:", error)
-    return new NextResponse(
-      error instanceof Error ? error.message : "Internal Server Error",
-      { status: 500 }
-    )
+    if (error instanceof z.ZodError) {
+      return new NextResponse("Invalid request data", { status: 400 })
+    }
+
+    console.error("[EVENTS_POST]", error)
+    return new NextResponse("Internal Error", { status: 500 })
   }
 }
 
 export async function GET(
-  req: Request,
-  { params }: { params: { id: string; seasonId: string; fixtureId: string } }
+  request: Request,
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -144,15 +146,18 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id, seasonId, fixtureId } = params
+
     const events = await prisma.event.findMany({
       where: {
         match: {
-          fixtureId: params.fixtureId,
+          fixtureId: fixtureId,
           fixture: {
-            seasonId: params.seasonId,
+            seasonId: seasonId,
             season: {
               league: {
-                id: params.id,
+                id: id,
                 ownerId: session.user.id,
               },
             },

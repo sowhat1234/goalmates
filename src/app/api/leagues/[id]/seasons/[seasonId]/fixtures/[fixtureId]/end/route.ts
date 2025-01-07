@@ -1,11 +1,17 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+
+type RouteParams = Promise<{
+  id: string
+  seasonId: string
+  fixtureId: string
+}>
 
 export async function POST(
   request: Request,
-  context: { params: { id: string; seasonId: string; fixtureId: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +20,8 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const { id: leagueId, seasonId, fixtureId } = context.params
+    const params = await props.params
+    const { id: leagueId, seasonId, fixtureId } = params
 
     // Verify the league and season exist and belong to the user
     const league = await prisma.league.findFirst({
@@ -38,13 +45,13 @@ export async function POST(
       return new NextResponse("Not Found", { status: 404 })
     }
 
-    // Update the fixture status to FINISHED
+    // Update the fixture with the new status and return it with all relationships
     const updatedFixture = await prisma.fixture.update({
       where: {
         id: fixtureId
       },
       data: {
-        status: "FINISHED"
+        status: "COMPLETED"
       },
       include: {
         matches: {

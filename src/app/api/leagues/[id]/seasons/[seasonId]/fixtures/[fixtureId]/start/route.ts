@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
+type RouteParams = Promise<{
+  id: string
+  seasonId: string
+  fixtureId: string
+}>
+
 const startMatchSchema = z.object({
   homeTeamId: z.string(),
   awayTeamId: z.string(),
@@ -12,7 +18,7 @@ const startMatchSchema = z.object({
 
 export async function POST(
   request: Request,
-  context: { params: { id: string; seasonId: string; fixtureId: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -21,7 +27,8 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const { id: leagueId, seasonId, fixtureId } = context.params
+    const params = await props.params
+    const { id: leagueId, seasonId, fixtureId } = params
 
     // Verify the league and season exist and belong to the user
     const league = await prisma.league.findFirst({
@@ -116,6 +123,10 @@ export async function POST(
 
     return NextResponse.json(updatedFixture)
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return new NextResponse("Invalid request data", { status: 400 })
+    }
+
     console.error("[FIXTURE_START]", error)
     return new NextResponse("Internal Error", { status: 500 })
   }

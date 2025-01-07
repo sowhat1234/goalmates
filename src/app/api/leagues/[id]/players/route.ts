@@ -1,11 +1,18 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
-import { authOptions } from "@/lib/auth"
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+
+type RouteParams = Promise<{ id: string }>
+
+const createPlayerSchema = z.object({
+  name: z.string().min(1),
+})
 
 export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
+  request: Request,
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,9 +21,12 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id } = params
+
     const players = await prisma.player.findMany({
       where: {
-        leagueId: params.id,
+        leagueId: id,
         league: {
           ownerId: session.user.id,
         },
@@ -38,8 +48,8 @@ export async function GET(
 }
 
 export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
+  request: Request,
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -48,9 +58,12 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id } = params
+
     const league = await prisma.league.findFirst({
       where: {
-        id: params.id,
+        id: id,
         ownerId: session.user.id,
       },
     })
@@ -59,12 +72,13 @@ export async function POST(
       return new NextResponse("Not Found", { status: 404 })
     }
 
-    const json = await req.json()
+    const json = await request.json()
+    const body = createPlayerSchema.parse(json)
 
     const player = await prisma.player.create({
       data: {
-        name: json.name,
-        leagueId: params.id,
+        name: body.name,
+        leagueId: id,
       },
       select: {
         id: true,
@@ -74,6 +88,10 @@ export async function POST(
 
     return NextResponse.json(player)
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return new NextResponse("Invalid request data", { status: 400 })
+    }
+
     console.error("[PLAYERS_POST]", error)
     return new NextResponse("Internal Error", { status: 500 })
   }

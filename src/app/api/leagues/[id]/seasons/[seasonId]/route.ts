@@ -3,9 +3,14 @@ import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+type RouteParams = Promise<{ 
+  id: string
+  seasonId: string 
+}>
+
 export async function GET(
   req: Request,
-  { params }: { params: { id: string; seasonId: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,10 +19,13 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id, seasonId } = params
+
     const season = await prisma.season.findFirst({
       where: {
-        id: params.seasonId,
-        leagueId: params.id,
+        id: seasonId,
+        leagueId: id,
         league: {
           ownerId: session.user.id,
         },
@@ -75,7 +83,7 @@ export async function GET(
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string; seasonId: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -84,10 +92,13 @@ export async function PATCH(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id, seasonId } = params
+
     const season = await prisma.season.findFirst({
       where: {
-        id: params.seasonId,
-        leagueId: params.id,
+        id: seasonId,
+        leagueId: id,
         league: {
           ownerId: session.user.id,
         },
@@ -102,7 +113,7 @@ export async function PATCH(
 
     const updatedSeason = await prisma.season.update({
       where: {
-        id: params.seasonId,
+        id: seasonId,
       },
       data: {
         name: json.name,
@@ -121,7 +132,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string; seasonId: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -130,10 +141,13 @@ export async function DELETE(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id, seasonId } = params
+
     const season = await prisma.season.findFirst({
       where: {
-        id: params.seasonId,
-        leagueId: params.id,
+        id: seasonId,
+        leagueId: id,
         league: {
           ownerId: session.user.id,
         },
@@ -146,7 +160,7 @@ export async function DELETE(
 
     await prisma.season.delete({
       where: {
-        id: params.seasonId,
+        id: seasonId,
       },
     })
 

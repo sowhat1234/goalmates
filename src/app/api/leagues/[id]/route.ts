@@ -3,9 +3,11 @@ import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+type RouteParams = Promise<{ id: string }>
+
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,9 +16,12 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id } = params
+
     const league = await prisma.league.findFirst({
       where: {
-        id: params.id,
+        id: id,
         ownerId: session.user.id,
       },
       include: {
@@ -53,7 +58,7 @@ export async function GET(
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -62,11 +67,13 @@ export async function PATCH(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id } = params
     const json = await req.json()
 
     const league = await prisma.league.findFirst({
       where: {
-        id: params.id,
+        id: id,
         ownerId: session.user.id,
       },
     })
@@ -77,7 +84,7 @@ export async function PATCH(
 
     const updatedLeague = await prisma.league.update({
       where: {
-        id: params.id,
+        id: id,
       },
       data: {
         name: json.name,
@@ -94,7 +101,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -103,9 +110,12 @@ export async function DELETE(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id } = params
+
     const league = await prisma.league.findFirst({
       where: {
-        id: params.id,
+        id: id,
         ownerId: session.user.id,
       },
     })
@@ -116,7 +126,7 @@ export async function DELETE(
 
     await prisma.league.delete({
       where: {
-        id: params.id,
+        id: id,
       },
     })
 

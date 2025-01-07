@@ -17,10 +17,15 @@ interface Team {
   color: string
 }
 
+type PageParams = Promise<{
+  id: string
+  seasonId: string
+}>
+
 export default function NewFixturePage({
   params,
 }: {
-  params: { id: string; seasonId: string }
+  params: PageParams
 }) {
   const router = useRouter()
   const { data: session, status } = useSession({
@@ -40,12 +45,22 @@ export default function NewFixturePage({
   const [playersLoading, setPlayersLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
+  const [resolvedParams, setResolvedParams] = useState<{ id: string; seasonId: string } | null>(null)
+
+  useEffect(() => {
+    // Resolve params when component mounts
+    params.then(resolved => {
+      setResolvedParams(resolved)
+    })
+  }, [params])
 
   const fetchPlayers = useCallback(async () => {
+    if (!resolvedParams) return
+    
     setPlayersLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/leagues/${params.id}/players`)
+      const response = await fetch(`/api/leagues/${resolvedParams.id}/players`)
       if (!response.ok) {
         const errorData = await response.text()
         throw new Error(errorData || "Failed to fetch players")
@@ -58,17 +73,17 @@ export default function NewFixturePage({
     } finally {
       setPlayersLoading(false)
     }
-  }, [params.id, setPlayers, setPlayersLoading, setError])
+  }, [resolvedParams])
 
   useEffect(() => {
-    if (session?.user?.id) {
+    if (session?.user?.id && resolvedParams) {
       fetchPlayers()
     }
-  }, [session?.user?.id, fetchPlayers])
+  }, [session?.user?.id, resolvedParams, fetchPlayers])
 
   // Show loading state while session is loading
-  if (status === "loading") {
-    return <div className="text-center">Loading session...</div>
+  if (status === "loading" || !resolvedParams) {
+    return <div className="text-center">Loading...</div>
   }
 
   // Verify user is authenticated
@@ -80,7 +95,7 @@ export default function NewFixturePage({
   const handleSeedPlayers = async () => {
     setSeeding(true)
     try {
-      const response = await fetch(`/api/leagues/${params.id}/players/seed`, {
+      const response = await fetch(`/api/leagues/${resolvedParams.id}/players/seed`, {
         method: "POST",
       })
       if (!response.ok) {
@@ -167,7 +182,7 @@ export default function NewFixturePage({
 
     setLoading(true)
     try {
-      const response = await fetch(`/api/leagues/${params.id}/seasons/${params.seasonId}/fixtures`, {
+      const response = await fetch(`/api/leagues/${resolvedParams.id}/seasons/${resolvedParams.seasonId}/fixtures`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -198,7 +213,7 @@ export default function NewFixturePage({
       }
 
       const newFixture = await response.json()
-      router.push(`/dashboard/leagues/${params.id}/seasons/${params.seasonId}/fixtures/${newFixture.id}`)
+      router.push(`/dashboard/leagues/${resolvedParams.id}/seasons/${resolvedParams.seasonId}/fixtures/${newFixture.id}`)
     } catch (error) {
       console.error("Failed to create fixture:", error)
       setError(error instanceof Error ? error.message : "Failed to create fixture. Please try again.")

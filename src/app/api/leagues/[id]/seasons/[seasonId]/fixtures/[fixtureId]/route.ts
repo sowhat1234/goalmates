@@ -1,11 +1,17 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+
+type RouteParams = Promise<{
+  id: string
+  seasonId: string
+  fixtureId: string
+}>
 
 export async function GET(
-  req: Request,
-  context: { params: { id: string; seasonId: string; fixtureId: string } }
+  request: Request,
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +20,7 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const params = await Promise.resolve(context.params)
+    const params = await props.params
     const { id, seasonId, fixtureId } = params
 
     console.log('Fetching fixture:', { id, seasonId, fixtureId })
@@ -91,7 +97,7 @@ export async function GET(
 
 export async function DELETE(
   request: Request,
-  context: { params: { id: string; seasonId: string; fixtureId: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -100,7 +106,8 @@ export async function DELETE(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const { id: leagueId, seasonId, fixtureId } = context.params
+    const params = await props.params
+    const { id: leagueId, seasonId, fixtureId } = params
 
     // Verify the fixture exists and belongs to the user
     const fixture = await prisma.fixture.findFirst({
@@ -124,16 +131,16 @@ export async function DELETE(
           }
         }
       }
-    });
+    })
 
     if (!fixture) {
       return new NextResponse(
-        JSON.stringify({ error: "Fixture not found" }), 
-        { 
+        JSON.stringify({ error: "Fixture not found" }),
+        {
           status: 404,
           headers: { 'Content-Type': 'application/json' }
         }
-      );
+      )
     }
 
     // Delete everything in a transaction to ensure consistency
@@ -145,14 +152,14 @@ export async function DELETE(
             in: fixture.matches.map(m => m.id)
           }
         }
-      });
+      })
 
       // 2. Delete all player-team relationships
       const teamIds = fixture.matches.flatMap(m => [
         m.homeTeamId,
         m.awayTeamId,
         m.waitingTeamId
-      ]);
+      ])
 
       await tx.playerTeam.deleteMany({
         where: {
@@ -160,14 +167,14 @@ export async function DELETE(
             in: teamIds
           }
         }
-      });
+      })
 
       // 3. Delete all matches
       await tx.match.deleteMany({
         where: {
           fixtureId: fixture.id
         }
-      });
+      })
 
       // 4. Delete all teams
       await tx.team.deleteMany({
@@ -176,34 +183,28 @@ export async function DELETE(
             in: teamIds
           }
         }
-      });
+      })
 
       // 5. Finally delete the fixture
       await tx.fixture.delete({
         where: {
           id: fixture.id
         }
-      });
-    });
+      })
+    })
 
     return new NextResponse(
-      JSON.stringify({ success: true }), 
-      { 
+      JSON.stringify({ success: true }),
+      {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       }
-    );
-
+    )
   } catch (error) {
-    console.error("[FIXTURE_DELETE]", error);
+    console.error("[FIXTURE_DELETE]", error)
     return new NextResponse(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Internal Server Error" 
-      }), 
-      { 
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+      error instanceof Error ? error.message : "Internal Error",
+      { status: 500 }
+    )
   }
 } 

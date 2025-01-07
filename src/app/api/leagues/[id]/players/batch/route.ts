@@ -1,11 +1,22 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
-import { authOptions } from "@/lib/auth"
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+
+type RouteParams = Promise<{ id: string }>
+
+const createPlayersSchema = z.object({
+  players: z.array(
+    z.object({
+      name: z.string().min(1),
+    })
+  ),
+})
 
 export async function POST(
-  req: Request,
-  context: { params: { id: string } }
+  request: Request,
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,55 +25,38 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const { id: leagueId } = context.params
-    const { players } = await req.json()
+    const params = await props.params
+    const { id } = params
 
-    // Verify the league exists and belongs to the user
+    // Verify league ownership
     const league = await prisma.league.findFirst({
       where: {
-        id: leagueId,
-        ownerId: session.user.id
-      }
+        id: id,
+        ownerId: session.user.id,
+      },
     })
 
     if (!league) {
-      return new NextResponse("League not found", { status: 404 })
+      return new NextResponse("Not Found", { status: 404 })
     }
 
-    // Validate players array
-    if (!Array.isArray(players) || players.length === 0) {
-      return new NextResponse("Invalid players data", { status: 400 })
-    }
+    const json = await request.json()
+    const body = createPlayersSchema.parse(json)
 
-    // Create all players in a transaction
-    const createdPlayers = await prisma.$transaction(async (tx) => {
-      const results = []
-
-      for (const player of players) {
-        // Create new player directly in the league
-        const newPlayer = await tx.player.create({
-          data: {
-            name: player.name,
-            league: {
-              connect: {
-                id: leagueId
-              }
-            }
-          }
-        })
-
-        results.push(newPlayer)
-      }
-
-      return results
+    const players = await prisma.player.createMany({
+      data: body.players.map((player) => ({
+        name: player.name,
+        leagueId: id,
+      })),
     })
 
-    return NextResponse.json(createdPlayers)
+    return NextResponse.json({ count: players.count })
   } catch (error) {
-    console.error("[PLAYERS_BATCH_POST]", error)
-    return new NextResponse(
-      error instanceof Error ? error.message : "Internal Error",
-      { status: 500 }
-    )
+    if (error instanceof z.ZodError) {
+      return new NextResponse("Invalid request data", { status: 400 })
+    }
+
+    console.error("[PLAYERS_BATCH]", error)
+    return new NextResponse("Internal Error", { status: 500 })
   }
 } 

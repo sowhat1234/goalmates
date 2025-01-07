@@ -3,9 +3,11 @@ import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+type RouteParams = Promise<{ id: string }>
+
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -13,6 +15,9 @@ export async function GET(
     if (!session?.user?.id) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
+
+    const params = await props.params
+    const { id } = params
 
     const teams = await prisma.team.findMany({
       where: {
@@ -22,7 +27,7 @@ export async function GET(
               some: {
                 fixture: {
                   season: {
-                    leagueId: params.id,
+                    leagueId: id,
                     league: {
                       ownerId: session.user.id,
                     },
@@ -36,7 +41,7 @@ export async function GET(
               some: {
                 fixture: {
                   season: {
-                    leagueId: params.id,
+                    leagueId: id,
                     league: {
                       ownerId: session.user.id,
                     },
@@ -73,7 +78,7 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -82,9 +87,12 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    const params = await props.params
+    const { id } = params
+
     const league = await prisma.league.findFirst({
       where: {
-        id: params.id,
+        id: id,
         ownerId: session.user.id,
       },
     })

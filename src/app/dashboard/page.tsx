@@ -28,20 +28,6 @@ export default function DashboardPage() {
   const [leagues, setLeagues] = useState<League[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    fetchLeagues()
-  }, [])
-
-  // Show loading state while session is loading
-  if (status === "loading") {
-    return <div className="text-center">Loading session...</div>
-  }
-
-  // Verify user is authenticated
-  if (!session?.user?.id) {
-    redirect('/api/auth/signin')
-  }
-
   const fetchLeagues = async () => {
     try {
       const response = await fetch("/api/leagues")
@@ -55,6 +41,20 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
+    fetchLeagues()
+  }, [])
+
+  // Show loading state while session is loading
+  if (status === "loading") {
+    return <div className="text-center">Loading session...</div>
+  }
+
+  // Verify user is authenticated
+  if (!session?.user?.id) {
+    redirect('/api/auth/signin')
   }
 
   const handleCreateLeague = async (e: React.FormEvent) => {

@@ -1,29 +1,13 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
-const MOCK_PLAYERS = [
-  { name: "John Doe" },
-  { name: "Jane Smith" },
-  { name: "Bob Johnson" },
-  { name: "Alice Brown" },
-  { name: "Charlie Wilson" },
-  { name: "David Lee" },
-  { name: "Eva Garcia" },
-  { name: "Frank Miller" },
-  { name: "Grace Taylor" },
-  { name: "Henry Martinez" },
-  { name: "Ivy Chen" },
-  { name: "Jack Anderson" },
-  { name: "Kelly White" },
-  { name: "Liam Thomas" },
-  { name: "Mia Rodriguez" },
-]
+type RouteParams = Promise<{ id: string }>
 
 export async function POST(
-  req: Request,
-  context: { params: { id: string } }
+  request: Request,
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -32,35 +16,52 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const { id } = context.params
+    const params = await props.params
+    const { id } = params
 
+    // Verify league ownership
     const league = await prisma.league.findFirst({
       where: {
-        id,
+        id: id,
         ownerId: session.user.id,
       },
     })
 
     if (!league) {
-      return new NextResponse("League not found", { status: 404 })
+      return new NextResponse("Not Found", { status: 404 })
     }
 
-    // Delete existing players first
-    await prisma.player.deleteMany({
-      where: {
-        leagueId: id,
-      },
-    })
+    // Create 15 mock players
+    const mockPlayers = [
+      "John Smith",
+      "Michael Johnson",
+      "David Williams",
+      "James Brown",
+      "Robert Jones",
+      "William Davis",
+      "Richard Miller",
+      "Joseph Wilson",
+      "Thomas Moore",
+      "Charles Taylor",
+      "Christopher Anderson",
+      "Daniel Thomas",
+      "Matthew Jackson",
+      "Anthony White",
+      "Donald Harris",
+    ]
 
-    // Create new mock players
-    const players = await prisma.player.createMany({
-      data: MOCK_PLAYERS.map(player => ({
-        name: player.name,
-        leagueId: id,
-      })),
-    })
+    const players = await Promise.all(
+      mockPlayers.map((name) =>
+        prisma.player.create({
+          data: {
+            name,
+            leagueId: id,
+          },
+        })
+      )
+    )
 
-    return NextResponse.json({ message: "Players seeded successfully", count: players.count })
+    return NextResponse.json(players)
   } catch (error) {
     console.error("[PLAYERS_SEED]", error)
     return new NextResponse("Internal Error", { status: 500 })

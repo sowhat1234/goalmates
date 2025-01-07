@@ -2,17 +2,16 @@ import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { z } from "zod"
 
-const rotateSchema = z.object({
-  winningTeamId: z.string(),
-  losingTeamId: z.string(),
-  newWaitingTeamId: z.string(),
-})
+type RouteParams = Promise<{ 
+  id: string
+  seasonId: string
+  fixtureId: string 
+}>
 
 export async function POST(
   req: Request,
-  context: { params: { id: string; seasonId: string; fixtureId: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -21,58 +20,27 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const { id, seasonId, fixtureId } = await Promise.resolve(context.params)
+    const params = await props.params
+    const { id: leagueId, seasonId, fixtureId } = params
 
-    // Verify fixture exists and belongs to the user
+    // Verify the fixture exists and belongs to the user
     const fixture = await prisma.fixture.findFirst({
       where: {
         id: fixtureId,
-        seasonId,
+        seasonId: seasonId,
         season: {
+          leagueId: leagueId,
           league: {
-            id,
-            ownerId: session.user.id,
-          },
-        },
+            ownerId: session.user.id
+          }
+        }
       },
       include: {
         matches: {
           include: {
-            homeTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true
-                  }
-                }
-              }
-            },
-            awayTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true
-                  }
-                }
-              }
-            },
-            waitingTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true
-                  }
-                }
-              }
-            },
-            events: {
-              include: {
-                player: true
-              },
-              orderBy: {
-                createdAt: "desc"
-              }
-            }
+            homeTeam: true,
+            awayTeam: true,
+            waitingTeam: true
           }
         }
       }
@@ -82,60 +50,46 @@ export async function POST(
       return new NextResponse("Fixture not found", { status: 404 })
     }
 
-    const json = await req.json()
-    const validatedData = rotateSchema.parse(json)
+    if (fixture.matches.length === 0) {
+      return new NextResponse("No matches found in fixture", { status: 400 })
+    }
 
-    // Update the fixture with the new team positions
-    const updatedFixture = await prisma.fixture.update({
-      where: { id: fixtureId },
+    const match = fixture.matches[0]
+    
+    // Rotate teams: home -> waiting, away -> home, waiting -> away
+    const updatedMatch = await prisma.match.update({
+      where: {
+        id: match.id
+      },
       data: {
-        matches: {
-          update: {
-            where: { id: fixture.matches[0].id },
-            data: {
-              homeTeamId: validatedData.winningTeamId,
-              awayTeamId: validatedData.newWaitingTeamId,
-              waitingTeamId: validatedData.losingTeamId
-            }
-          }
-        }
+        homeTeamId: match.awayTeamId,
+        awayTeamId: match.waitingTeamId,
+        waitingTeamId: match.homeTeamId
       },
       include: {
-        matches: {
+        homeTeam: {
           include: {
-            homeTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true
-                  }
-                }
-              }
-            },
-            awayTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true
-                  }
-                }
-              }
-            },
-            waitingTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true
-                  }
-                }
-              }
-            },
-            events: {
+            players: {
               include: {
                 player: true
-              },
-              orderBy: {
-                createdAt: 'desc'
+              }
+            }
+          }
+        },
+        awayTeam: {
+          include: {
+            players: {
+              include: {
+                player: true
+              }
+            }
+          }
+        },
+        waitingTeam: {
+          include: {
+            players: {
+              include: {
+                player: true
               }
             }
           }
@@ -143,36 +97,12 @@ export async function POST(
       }
     })
 
-    if (!updatedFixture) {
-      return new NextResponse("Failed to fetch updated fixture", { status: 500 })
-    }
-
-    // Convert dates to ISO strings
-    const formattedFixture = {
-      ...updatedFixture,
-      date: updatedFixture.date.toISOString(),
-      createdAt: updatedFixture.createdAt.toISOString(),
-      updatedAt: updatedFixture.updatedAt.toISOString(),
-      matches: updatedFixture.matches.map(match => ({
-        ...match,
-        createdAt: match.createdAt.toISOString(),
-        updatedAt: match.updatedAt.toISOString(),
-        events: match.events.map(event => ({
-          ...event,
-          createdAt: event.createdAt.toISOString(),
-          updatedAt: event.updatedAt.toISOString(),
-          timestamp: event.timestamp?.toISOString() || null
-        }))
-      }))
-    }
-
-    return NextResponse.json(formattedFixture)
+    return NextResponse.json(updatedMatch)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return new NextResponse("Invalid request data", { status: 400 })
-    }
-
     console.error("[ROTATE_POST]", error)
-    return new NextResponse("Internal Error", { status: 500 })
+    return new NextResponse(
+      error instanceof Error ? error.message : "Internal Error",
+      { status: 500 }
+    )
   }
 } 
