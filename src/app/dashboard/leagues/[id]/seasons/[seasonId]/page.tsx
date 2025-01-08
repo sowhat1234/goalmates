@@ -46,7 +46,7 @@ type Season = {
   }>
 }
 
-type FixtureState = 'NOT_STARTED' | 'IN_PROGRESS' | 'FINISHED';
+type FixtureState = 'WAITING_TO_START' | 'IN_PROGRESS' | 'COMPLETED';
 
 function getFixtureState(fixture: Season['fixtures'][0]): FixtureState {
   // First check if the fixture has the new status field
@@ -57,7 +57,7 @@ function getFixtureState(fixture: Season['fixtures'][0]): FixtureState {
   // Fallback to determining status from events
   // If there are no matches or no events, it hasn't started
   if (!fixture.matches.length || !fixture.matches.some(match => match.events.length > 0)) {
-    return 'NOT_STARTED';
+    return 'WAITING_TO_START';
   }
 
   // If any match has events but no WIN event, it's in progress
@@ -70,11 +70,11 @@ function getFixtureState(fixture: Season['fixtures'][0]): FixtureState {
   }
 
   // If all matches have WIN events, it's finished
-  return 'FINISHED';
+  return 'COMPLETED';
 }
 
 function getWinningTeam(fixture: Season['fixtures'][0]): { name: string, wins: number } | null {
-  if (getFixtureState(fixture) !== 'FINISHED') return null;
+  if (getFixtureState(fixture) !== 'COMPLETED') return null;
 
   const teamWins = new Map<string, { name: string, wins: number }>();
 
@@ -318,7 +318,7 @@ export default function SeasonDetail() {
                       {new Date(fixture.date).toLocaleDateString()}
                     </h3>
                     <div className="mt-1">
-                      {fixtureState === 'NOT_STARTED' && (
+                      {fixtureState === 'WAITING_TO_START' && (
                         <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
                           Waiting to Start
                         </span>
@@ -328,7 +328,7 @@ export default function SeasonDetail() {
                           In Progress
                         </span>
                       )}
-                      {fixtureState === 'FINISHED' && (
+                      {fixtureState === 'COMPLETED' && (
                         <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
                           Complete {winningTeam && `• Winner: ${winningTeam.name}`}
                         </span>
