@@ -3,39 +3,39 @@
 import { useState, useEffect } from "react"
 import { FaTshirt } from "react-icons/fa"
 import { BsHourglassSplit } from "react-icons/bs"
+import { Event as PrismaEvent } from "@prisma/client"
 
-interface Player {
+export interface Player {
   id: string
   name: string
 }
 
-interface TeamPlayer {
+export interface TeamPlayer {
   player: Player
 }
 
-interface Team {
+export interface Team {
   id: string
   name: string
   players: TeamPlayer[]
   color?: string
 }
 
-interface Match {
-  id: string
-  homeTeam: Team
-  awayTeam: Team
-  waitingTeam: Team
-  events: Event[]
+export interface Event extends Omit<PrismaEvent, 'createdAt' | 'updatedAt' | 'timestamp'> {
+  createdAt: string
+  updatedAt: string
+  timestamp: string | null
+  player: Player
 }
 
-interface Event {
+export interface Match {
   id: string
-  type: string
-  playerId: string
-  matchId: string
+  homeTeam: Team & { players: { player: Player }[] }
+  awayTeam: Team & { players: { player: Player }[] }
+  waitingTeam: Team & { players: { player: Player }[] }
+  events: Event[]
   createdAt: string
-  player: Player
-  team: string
+  updatedAt: string
 }
 
 interface TeamSelectionProps {

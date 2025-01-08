@@ -4,26 +4,34 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { Fixture as PrismaFixture, Team, Event } from "@prisma/client"
+import { Fixture as PrismaFixture, Team, Event, Player } from "@prisma/client"
 
-type SerializedFixture = Omit<PrismaFixture, 'date' | 'createdAt' | 'updatedAt'> & {
+interface SerializedEvent extends Omit<Event, 'createdAt' | 'updatedAt' | 'timestamp'> {
+  createdAt: string;
+  updatedAt: string;
+  timestamp: string | null;
+  player: Player;
+}
+
+interface SerializedTeam extends Team {
+  players: { player: Player }[];
+}
+
+interface SerializedMatch {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  homeTeam: SerializedTeam;
+  awayTeam: SerializedTeam;
+  waitingTeam: SerializedTeam;
+  events: SerializedEvent[];
+}
+
+interface SerializedFixture extends Omit<PrismaFixture, 'date' | 'createdAt' | 'updatedAt'> {
   date: string;
   createdAt: string;
   updatedAt: string;
-  matches: {
-    id: string;
-    createdAt: string;
-    updatedAt: string;
-    homeTeam: Team & { players: any[] };
-    awayTeam: Team & { players: any[] };
-    waitingTeam: Team & { players: any[] };
-    events: Array<Omit<Event, 'createdAt' | 'updatedAt' | 'timestamp'> & {
-      createdAt: string;
-      updatedAt: string;
-      timestamp: string | null;
-      playerId: string;
-    }>;
-  }[];
+  matches: SerializedMatch[];
 }
 
 async function getFixtureData(id: string, seasonId: string, fixtureId: string) {

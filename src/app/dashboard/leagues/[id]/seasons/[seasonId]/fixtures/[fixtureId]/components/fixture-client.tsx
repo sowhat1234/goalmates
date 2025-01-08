@@ -5,45 +5,7 @@ import { format } from "date-fns"
 import useSWR from 'swr'
 import { FaTshirt, FaClock, FaPlay, FaPause } from 'react-icons/fa'
 import { TeamSelection } from './team-selection'
-
-interface Player {
-  id: string
-  name: string
-}
-
-interface TeamPlayer {
-  player: Player
-}
-
-interface Team {
-  id: string
-  name: string
-  players: TeamPlayer[]
-  color?: string
-}
-
-interface Event {
-  id: string
-  type: string
-  playerId: string
-  matchId: string
-  createdAt: string
-  player: Player
-  team: string
-}
-
-interface Fixture {
-  id: string
-  date: string
-  status: string
-  matches: Array<{
-    id: string
-    homeTeam: Team
-    awayTeam: Team
-    waitingTeam: Team
-    events: Event[]
-  }>
-}
+import type { Match, Event, Team, Player, TeamPlayer } from './team-selection'
 
 interface MatchTimer {
   minutes: number
@@ -51,12 +13,13 @@ interface MatchTimer {
   isRunning: boolean
 }
 
-interface Match {
+interface Fixture {
   id: string
-  homeTeam: Team
-  awayTeam: Team
-  waitingTeam: Team
-  events: Event[]
+  date: string
+  status: string
+  matches: Match[]
+  createdAt: string
+  updatedAt: string
 }
 
 // Add these constants at the top of the file
@@ -697,26 +660,28 @@ export function FixtureClient({
     }
 
     const emptyMatch: Match = {
-            id: '',
-            homeTeam: {
-              id: 'home',
-              name: initialTeams.homeTeam.name,
-              color: initialTeams.homeTeam.color,
-              players: players.map(p => ({ player: p }))
-            },
-            awayTeam: {
-              id: 'away',
-              name: initialTeams.awayTeam.name,
-              color: initialTeams.awayTeam.color,
-              players: players.map(p => ({ player: p }))
-            },
-            waitingTeam: {
-              id: 'waiting',
-              name: initialTeams.waitingTeam.name,
-              color: initialTeams.waitingTeam.color,
-              players: players.map(p => ({ player: p }))
+      id: '',
+      homeTeam: {
+        id: 'home',
+        name: initialTeams.homeTeam.name,
+        color: initialTeams.homeTeam.color,
+        players: players.map((p: Player) => ({ player: p }))
       },
-      events: []
+      awayTeam: {
+        id: 'away',
+        name: initialTeams.awayTeam.name,
+        color: initialTeams.awayTeam.color,
+        players: players.map((p: Player) => ({ player: p }))
+      },
+      waitingTeam: {
+        id: 'waiting',
+        name: initialTeams.waitingTeam.name,
+        color: initialTeams.waitingTeam.color,
+        players: players.map((p: Player) => ({ player: p }))
+      },
+      events: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     return (
@@ -767,7 +732,7 @@ export function FixtureClient({
                 </tr>
               </thead>
               <tbody>
-                {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team) => {
+                {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team: Team) => {
                   const teamEvents = currentMatch.events.filter(
                     (event: Event) => event.team === team.id
                   )
@@ -807,7 +772,7 @@ export function FixtureClient({
                 </tr>
               </thead>
               <tbody>
-                {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer) => {
+                {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer: TeamPlayer) => {
                   const playerEvents = currentMatch.events.filter(
                     (event: Event) => event.playerId === teamPlayer.player.id
                   )
@@ -1176,7 +1141,7 @@ export function FixtureClient({
               </tr>
             </thead>
             <tbody>
-              {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team) => {
+              {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team: Team) => {
                 const teamEvents = currentMatch.events.filter(
                   (event) => event.team === team.id
                 )
@@ -1217,7 +1182,7 @@ export function FixtureClient({
               </tr>
             </thead>
             <tbody>
-              {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer) => {
+              {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer: TeamPlayer) => {
                 const playerEvents = currentMatch.events.filter(
                   (event) => event.playerId === teamPlayer.player.id
                 )
