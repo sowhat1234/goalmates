@@ -119,44 +119,43 @@ export async function POST(
       data: {
         date: new Date(body.date),
         seasonId,
+        status: "WAITING_TO_START",
         matches: {
-          create: [
-            {
-              homeTeam: {
-                create: {
-                  name: body.homeTeam.name,
-                  color: body.homeTeam.color,
-                  players: {
-                    create: body.homeTeam.players.map((playerId) => ({
-                      playerId,
-                    })),
-                  },
-                },
-              },
-              awayTeam: {
-                create: {
-                  name: body.awayTeam.name,
-                  color: body.awayTeam.color,
-                  players: {
-                    create: body.awayTeam.players.map((playerId) => ({
-                      playerId,
-                    })),
-                  },
-                },
-              },
-              waitingTeam: {
-                create: {
-                  name: body.waitingTeam.name,
-                  color: body.waitingTeam.color,
-                  players: {
-                    create: body.waitingTeam.players.map((playerId) => ({
-                      playerId,
-                    })),
-                  },
+          create: [{
+            homeTeam: {
+              create: {
+                name: body.homeTeam.name,
+                color: body.homeTeam.color,
+                players: {
+                  create: body.homeTeam.players.map((playerId) => ({
+                    playerId,
+                  })),
                 },
               },
             },
-          ],
+            awayTeam: {
+              create: {
+                name: body.awayTeam.name,
+                color: body.awayTeam.color,
+                players: {
+                  create: body.awayTeam.players.map((playerId) => ({
+                    playerId,
+                  })),
+                },
+              },
+            },
+            waitingTeam: {
+              create: {
+                name: body.waitingTeam.name,
+                color: body.waitingTeam.color,
+                players: {
+                  create: body.waitingTeam.players.map((playerId) => ({
+                    playerId,
+                  })),
+                },
+              },
+            },
+          }],
         },
       },
       include: {

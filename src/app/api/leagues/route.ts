@@ -38,10 +38,14 @@ export async function POST(req: Request) {
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
+    console.log("[LEAGUES_GET] Session:", session)
 
     if (!session?.user?.id) {
+      console.log("[LEAGUES_GET] No user ID in session")
       return new NextResponse("Unauthorized", { status: 401 })
     }
+
+    console.log("[LEAGUES_GET] Fetching leagues for user:", session.user.id)
 
     const leagues = await prisma.league.findMany({
       where: {
@@ -60,9 +64,11 @@ export async function GET() {
       },
     })
 
+    console.log("[LEAGUES_GET] Found leagues:", leagues)
+
     return NextResponse.json(leagues)
   } catch (error) {
-    console.error("[LEAGUES_GET]", error)
+    console.error("[LEAGUES_GET] Error:", error)
     return new NextResponse("Internal Error", { status: 500 })
   }
 } 

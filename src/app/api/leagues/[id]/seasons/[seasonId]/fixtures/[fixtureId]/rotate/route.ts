@@ -56,15 +56,19 @@ export async function POST(
 
     const match = fixture.matches[0]
     
-    // Rotate teams: home -> waiting, away -> home, waiting -> away
+    // Get the team IDs from the request body
+    const body = await req.json()
+    const { winningTeamId, losingTeamId } = body
+
+    // Rotate teams: winner stays home, waiting -> away, loser -> waiting
     const updatedMatch = await prisma.match.update({
       where: {
         id: match.id
       },
       data: {
-        homeTeamId: match.awayTeamId,
-        awayTeamId: match.waitingTeamId,
-        waitingTeamId: match.homeTeamId
+        homeTeamId: winningTeamId,         // Winner stays as home team
+        awayTeamId: match.waitingTeamId,   // Waiting team becomes away team
+        waitingTeamId: losingTeamId        // Losing team becomes waiting team
       },
       include: {
         homeTeam: {

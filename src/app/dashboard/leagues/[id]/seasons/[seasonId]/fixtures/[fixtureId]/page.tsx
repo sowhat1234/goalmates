@@ -4,6 +4,27 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { Fixture as PrismaFixture, Team, Event } from "@prisma/client"
+
+type SerializedFixture = Omit<PrismaFixture, 'date' | 'createdAt' | 'updatedAt'> & {
+  date: string;
+  createdAt: string;
+  updatedAt: string;
+  matches: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    homeTeam: Team & { players: any[] };
+    awayTeam: Team & { players: any[] };
+    waitingTeam: Team & { players: any[] };
+    events: Array<Omit<Event, 'createdAt' | 'updatedAt' | 'timestamp'> & {
+      createdAt: string;
+      updatedAt: string;
+      timestamp: string | null;
+      playerId: string;
+    }>;
+  }[];
+}
 
 async function getFixtureData(id: string, seasonId: string, fixtureId: string) {
   const session = await getServerSession(authOptions)
@@ -86,7 +107,7 @@ async function getFixtureData(id: string, seasonId: string, fixtureId: string) {
         timestamp: event.timestamp?.toISOString() || null
       }))
     }))
-  }
+  } as SerializedFixture
 }
 
 type PageParams = Promise<{

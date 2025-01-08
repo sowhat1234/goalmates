@@ -11,9 +11,21 @@ type RouteParams = Promise<{
 }>
 
 const startMatchSchema = z.object({
-  homeTeamId: z.string(),
-  awayTeamId: z.string(),
-  waitingTeamId: z.string()
+  homeTeam: z.object({
+    name: z.string(),
+    color: z.string(),
+    players: z.array(z.string()),
+  }),
+  awayTeam: z.object({
+    name: z.string(),
+    color: z.string(),
+    players: z.array(z.string()),
+  }),
+  waitingTeam: z.object({
+    name: z.string(),
+    color: z.string(),
+    players: z.array(z.string()),
+  })
 })
 
 export async function POST(
@@ -52,28 +64,10 @@ export async function POST(
       return new NextResponse("Not Found", { status: 404 })
     }
 
-    const json = await request.json()
-    const validatedData = startMatchSchema.parse(json)
-
-    // Create a new match with the validated team IDs
-    const match = await prisma.match.create({
-      data: {
-        fixtureId,
-        homeTeamId: validatedData.homeTeamId,
-        awayTeamId: validatedData.awayTeamId,
-        waitingTeamId: validatedData.waitingTeamId
-      }
-    })
-
     // Update the fixture with the new status and return it with all relationships
     const updatedFixture = await prisma.fixture.update({
       where: {
-        id: fixtureId,
-        matches: {
-          some: {
-            id: match.id
-          }
-        }
+        id: fixtureId
       },
       data: {
         status: "IN_PROGRESS"

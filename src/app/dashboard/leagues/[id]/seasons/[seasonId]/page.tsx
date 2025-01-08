@@ -166,6 +166,10 @@ export default function SeasonDetail() {
         throw new Error(await response.text());
       }
 
+      // Clean up localStorage
+      localStorage.removeItem(`fixture_teams_${fixtureId}`);
+      localStorage.removeItem(`fixture_timer_${fixtureId}`);
+
       // Refresh the season data
       await fetchSeason();
     } catch (error) {

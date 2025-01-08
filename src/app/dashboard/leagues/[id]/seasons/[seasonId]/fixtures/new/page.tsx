@@ -182,6 +182,14 @@ export default function NewFixturePage({
 
     setLoading(true)
     try {
+      // Clean up any existing localStorage data for old fixtures
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('fixture_teams_') || key?.startsWith('fixture_timer_')) {
+          localStorage.removeItem(key);
+        }
+      }
+
       const response = await fetch(`/api/leagues/${resolvedParams.id}/seasons/${resolvedParams.seasonId}/fixtures`, {
         method: "POST",
         headers: {
@@ -191,18 +199,18 @@ export default function NewFixturePage({
           date,
           homeTeam: {
             name: teams.find(t => t.id === "home")?.name || "Home Team",
-            players: teams.find(t => t.id === "home")?.players || [],
-            color: teams.find(t => t.id === "home")?.color || "red"
+            color: teams.find(t => t.id === "home")?.color || "red",
+            players: teams.find(t => t.id === "home")?.players || []
           },
           awayTeam: {
             name: teams.find(t => t.id === "away")?.name || "Away Team",
-            players: teams.find(t => t.id === "away")?.players || [],
-            color: teams.find(t => t.id === "away")?.color || "blue"
+            color: teams.find(t => t.id === "away")?.color || "blue",
+            players: teams.find(t => t.id === "away")?.players || []
           },
           waitingTeam: {
             name: teams.find(t => t.id === "waiting")?.name || "Waiting Team",
-            players: teams.find(t => t.id === "waiting")?.players || [],
-            color: teams.find(t => t.id === "waiting")?.color || "green"
+            color: teams.find(t => t.id === "waiting")?.color || "green",
+            players: teams.find(t => t.id === "waiting")?.players || []
           }
         }),
       })
@@ -213,6 +221,26 @@ export default function NewFixturePage({
       }
 
       const newFixture = await response.json()
+      
+      // Store team configurations in localStorage
+      localStorage.setItem(`fixture_teams_${newFixture.id}`, JSON.stringify({
+        homeTeam: {
+          name: teams.find(t => t.id === "home")?.name,
+          color: teams.find(t => t.id === "home")?.color,
+          players: teams.find(t => t.id === "home")?.players
+        },
+        awayTeam: {
+          name: teams.find(t => t.id === "away")?.name,
+          color: teams.find(t => t.id === "away")?.color,
+          players: teams.find(t => t.id === "away")?.players
+        },
+        waitingTeam: {
+          name: teams.find(t => t.id === "waiting")?.name,
+          color: teams.find(t => t.id === "waiting")?.color,
+          players: teams.find(t => t.id === "waiting")?.players
+        }
+      }))
+
       router.push(`/dashboard/leagues/${resolvedParams.id}/seasons/${resolvedParams.seasonId}/fixtures/${newFixture.id}`)
     } catch (error) {
       console.error("Failed to create fixture:", error)
@@ -241,7 +269,10 @@ export default function NewFixturePage({
             type="datetime-local"
             id="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              setDate(e.target.value);
+              e.target.blur(); // This will close the picker after selection
+            }}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
             required
           />

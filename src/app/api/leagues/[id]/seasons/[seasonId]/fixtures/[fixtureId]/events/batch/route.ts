@@ -1,13 +1,24 @@
 import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { PrismaClient } from "@prisma/client"
 
 type RouteParams = Promise<{ 
   id: string
   seasonId: string
   fixtureId: string 
 }>
+
+const batchEventSchema = z.object({
+  events: z.array(z.object({
+    type: z.enum(["GOAL", "ASSIST", "SAVE", "YELLOW_CARD", "RED_CARD", "WOW_MOMENT", "WIN"]),
+    playerId: z.union([z.string(), z.literal("")]),
+    matchId: z.string(),
+    team: z.string()
+  }))
+})
 
 export async function POST(
   req: Request,
@@ -22,7 +33,10 @@ export async function POST(
 
     const params = await props.params
     const { id: leagueId, seasonId, fixtureId } = params
-    const { events } = await req.json()
+    const body = await req.json()
+    
+    // Validate the request body against the schema
+    const { events } = batchEventSchema.parse(body)
 
     // Verify the fixture exists and belongs to the user
     const fixture = await prisma.fixture.findFirst({
@@ -51,26 +65,28 @@ export async function POST(
     }
 
     // Create all events in a transaction
-    const createdEvents = await prisma.$transaction(async (tx) => {
+    const createdEvents = await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => {
       const results = []
 
       for (const event of events) {
         // Verify the match belongs to the fixture
-        const matchBelongsToFixture = fixture.matches.some(match => match.id === event.matchId)
+        const matchBelongsToFixture = fixture.matches.some((match: { id: string }) => match.id === event.matchId)
         if (!matchBelongsToFixture) {
           throw new Error("Match does not belong to the fixture")
         }
 
-        // Create new event
+        // Create new event with conditional player inclusion
+        const eventData = {
+          type: event.type,
+          matchId: event.matchId,
+          team: event.team,
+          ...(event.type !== "WIN" ? { playerId: event.playerId } : {})  // Only include playerId for non-WIN events
+        }
+
         const newEvent = await tx.event.create({
-          data: {
-            type: event.type,
-            playerId: event.playerId,
-            matchId: event.matchId,
-            team: event.team
-          },
+          data: eventData,
           include: {
-            player: true
+            player: event.type !== "WIN"  // Only include player for non-WIN events
           }
         })
 

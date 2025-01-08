@@ -3,10 +3,15 @@ import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
+
 type RouteParams = Promise<{
   id: string
   playerId: string
 }>
+
+interface EventData {
+  type: string;
+}
 
 export async function GET(
   request: Request,
@@ -54,12 +59,12 @@ export async function GET(
     })
 
     const stats = {
-      goals: events.filter(e => e.type === "GOAL").length,
-      assists: events.filter(e => e.type === "ASSIST").length,
-      saves: events.filter(e => e.type === "SAVE").length,
-      yellowCards: events.filter(e => e.type === "YELLOW_CARD").length,
-      redCards: events.filter(e => e.type === "RED_CARD").length,
-      wowMoments: events.filter(e => e.type === "WOW_MOMENT").length,
+      goals: events.filter((e: EventData) => e.type === "GOAL").length,
+      assists: events.filter((e: EventData) => e.type === "ASSIST").length,
+      saves: events.filter((e: EventData) => e.type === "SAVE").length,
+      yellowCards: events.filter((e: EventData)  => e.type === "YELLOW_CARD").length,
+      redCards: events.filter((e: EventData) => e.type === "RED_CARD").length,
+      wowMoments: events.filter((e: EventData) => e.type === "WOW_MOMENT").length,
     }
 
     return NextResponse.json({

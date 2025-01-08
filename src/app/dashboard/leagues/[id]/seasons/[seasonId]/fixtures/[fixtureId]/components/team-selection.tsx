@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { FaTshirt } from "react-icons/fa"
+import { BsHourglassSplit } from "react-icons/bs"
 
 interface Player {
   id: string
@@ -24,25 +25,75 @@ interface Match {
   homeTeam: Team
   awayTeam: Team
   waitingTeam: Team
+  events: Event[]
+}
+
+interface Event {
+  id: string
+  type: string
+  playerId: string
+  matchId: string
+  createdAt: string
+  player: Player
+  team: string
 }
 
 interface TeamSelectionProps {
   match: Match
-  onStart: (homeTeamId: string, awayTeamId: string, waitingTeamId: string) => void
+  onStart: (homeName: string, awayName: string, waitingName: string) => void
+  fixtureId: string
 }
 
-export function TeamSelection({ match, onStart }: TeamSelectionProps) {
+export function TeamSelection({ match, onStart, fixtureId }: TeamSelectionProps) {
+  const teams = [match.homeTeam, match.awayTeam, match.waitingTeam]
+  
+  // Load initial team configurations from localStorage
   const [selectedTeams, setSelectedTeams] = useState<{
-    home: string | null
-    away: string | null
-  }>({
-    home: null,
-    away: null
-  })
+    teamA: string | null
+    teamB: string | null
+    waiting: string | null
+  }>(() => {
+    if (typeof window === 'undefined') return { teamA: null, teamB: null, waiting: null };
+    
+    try {
+      const savedTeams = localStorage.getItem(`fixture_teams_${fixtureId}`);
+      if (savedTeams) {
+        const parsed = JSON.parse(savedTeams);
+        const savedHomeTeam = teams.find(t => t.name === parsed.homeTeam.name);
+        const savedAwayTeam = teams.find(t => t.name === parsed.awayTeam.name);
+        const savedWaitingTeam = teams.find(t => t.name === parsed.waitingTeam.name);
+        
+        return {
+          teamA: savedHomeTeam?.id || null,
+          teamB: savedAwayTeam?.id || null,
+          waiting: savedWaitingTeam?.id || null
+        };
+      }
+    } catch (error) {
+      console.error('Error loading team configurations:', error);
+    }
+    
+    return { teamA: null, teamB: null, waiting: null };
+  });
 
-  const allTeams = [match.homeTeam, match.awayTeam, match.waitingTeam]
+  // Update localStorage when teams change
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const teamA = teams.find(t => t.id === selectedTeams.teamA);
+    const teamB = teams.find(t => t.id === selectedTeams.teamB);
+    const waitingTeam = teams.find(t => t.id === selectedTeams.waiting);
+    
+    if (teamA && teamB && waitingTeam) {
+      localStorage.setItem(`fixture_teams_${fixtureId}`, JSON.stringify({
+        homeTeam: { name: teamA.name, players: teamA.players.map(p => p.player.id), color: teamA.color },
+        awayTeam: { name: teamB.name, players: teamB.players.map(p => p.player.id), color: teamB.color },
+        waitingTeam: { name: waitingTeam.name, players: waitingTeam.players.map(p => p.player.id), color: waitingTeam.color }
+      }));
+    }
+  }, [selectedTeams, teams, fixtureId]);
 
-  function getTeamColor(team: Team): { fill: string, text: string } {
+  const getTeamColor = (team: Team): { fill: string, text: string } => {
     const colorMap: { [key: string]: { fill: string, text: string } } = {
       red: { fill: '#ef4444', text: 'text-red-500' },
       blue: { fill: '#3b82f6', text: 'text-blue-500' },
@@ -54,125 +105,138 @@ export function TeamSelection({ match, onStart }: TeamSelectionProps) {
     return colorMap[team.color || 'red'] || colorMap.red
   }
 
-  const handleTeamSelect = (teamId: string, position: 'home' | 'away') => {
+  const handleTeamSelect = (position: 'teamA' | 'teamB' | 'waiting', teamId: string) => {
     setSelectedTeams(prev => {
-      // If this team is already selected somewhere else, remove it
-      if (prev.home === teamId) {
-        return { ...prev, home: null }
-      }
-      if (prev.away === teamId) {
-        return { ...prev, away: null }
-      }
-
-      // If this position already has a team, swap them
-      return { ...prev, [position]: teamId }
+      // Remove the team from its current position if it exists
+      const newPositions = { ...prev }
+      Object.entries(newPositions).forEach(([key, value]) => {
+        if (value === teamId) {
+          newPositions[key as keyof typeof newPositions] = null
+        }
+      })
+      // Assign to new position
+      newPositions[position] = teamId
+      return newPositions
     })
   }
 
-  const getWaitingTeamId = (): string | null => {
-    return allTeams.find(team => 
-      team.id !== selectedTeams.home && 
-      team.id !== selectedTeams.away
-    )?.id || null
+  const handleStart = () => {
+    const teamA = teams.find(t => t.id === selectedTeams.teamA)
+    const teamB = teams.find(t => t.id === selectedTeams.teamB)
+    const waitingTeam = teams.find(t => t.id === selectedTeams.waiting)
+
+    if (!teamA || !teamB || !waitingTeam) {
+      alert('Please select all teams')
+      return
+    }
+
+    // Save team configurations to localStorage with selected players
+    localStorage.setItem(`fixture_teams_${fixtureId}`, JSON.stringify({
+      homeTeam: {
+        name: teamA.name,
+        color: teamA.color || 'red',
+        players: teamA.players.map(p => p.player.id)
+      },
+      awayTeam: {
+        name: teamB.name,
+        color: teamB.color || 'blue',
+        players: teamB.players.map(p => p.player.id)
+      },
+      waitingTeam: {
+        name: waitingTeam.name,
+        color: waitingTeam.color || 'green',
+        players: waitingTeam.players.map(p => p.player.id)
+      }
+    }))
+
+    onStart(teamA.name, teamB.name, waitingTeam.name)
   }
 
-  const handleStart = () => {
-    const waitingTeamId = getWaitingTeamId()
-    if (selectedTeams.home && selectedTeams.away && waitingTeamId) {
-      onStart(selectedTeams.home, selectedTeams.away, waitingTeamId)
-    }
+  const renderTeamSelector = (position: 'teamA' | 'teamB' | 'waiting') => {
+    const selectedTeamId = selectedTeams[position]
+    const selectedTeam = teams.find(t => t.id === selectedTeamId)
+
+    return (
+      <div className={`p-6 rounded-lg border-2 ${position === 'waiting' ? 'max-w-sm mx-auto mt-8' : ''}`}>
+        <div className="space-y-4">
+          <select
+            value={selectedTeamId || ''}
+            onChange={(e) => handleTeamSelect(position, e.target.value)}
+            className="w-full p-3 border rounded-md text-gray-900 bg-white text-lg"
+          >
+            <option value="">Select team</option>
+            {teams.map((team) => (
+              <option
+                key={team.id}
+                value={team.id}
+              >
+                {team.name}
+              </option>
+            ))}
+          </select>
+
+          {selectedTeam && (
+            <>
+              <div className="flex justify-center">
+                <FaTshirt 
+                  style={{ fill: getTeamColor(selectedTeam).fill }}
+                  className={`w-20 h-20 ${position === 'waiting' ? 'opacity-70' : ''}`}
+                />
+              </div>
+              
+              <div className="mt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Players</h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {selectedTeam.players.map(({ player }) => (
+                    <div
+                      key={player.id}
+                      className="flex items-center p-2 rounded-md bg-gray-50"
+                    >
+                      <span className="text-sm text-gray-900">{player.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="container mx-auto p-6 bg-white">
-      <h2 className="text-xl font-bold mb-6 text-gray-900">Select Starting Teams</h2>
+      <h2 className="text-2xl font-bold mb-8 text-center text-gray-900">Select Teams</h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-        {/* Home Team Selection */}
-        <div className="border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Home Team</h3>
-          <div className="space-y-4">
-            {allTeams.map(team => (
-              <button
-                key={team.id}
-                onClick={() => handleTeamSelect(team.id, 'home')}
-                className={`w-full p-4 rounded-lg border-2 transition-all ${
-                  selectedTeams.home === team.id
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-blue-300'
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <FaTshirt 
-                    style={{ fill: getTeamColor(team).fill }}
-                    className="w-8 h-8"
-                  />
-                  <span className={`font-medium ${getTeamColor(team).text}`}>
-                    {team.name}
-                  </span>
-                </div>
-              </button>
-            ))}
+      <div className="mb-8">
+        {/* Active Teams */}
+        <div className="flex items-center justify-center gap-8">
+          <div className="w-1/3">
+            {renderTeamSelector('teamA')}
+          </div>
+          
+          <div className="flex flex-col items-center justify-center">
+            <div className="text-3xl font-bold text-gray-900 mb-4">VS</div>
+          </div>
+          
+          <div className="w-1/3">
+            {renderTeamSelector('teamB')}
           </div>
         </div>
 
-        {/* Away Team Selection */}
-        <div className="border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Away Team</h3>
-          <div className="space-y-4">
-            {allTeams.map(team => (
-              <button
-                key={team.id}
-                onClick={() => handleTeamSelect(team.id, 'away')}
-                className={`w-full p-4 rounded-lg border-2 transition-all ${
-                  selectedTeams.away === team.id
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-blue-300'
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <FaTshirt 
-                    style={{ fill: getTeamColor(team).fill }}
-                    className="w-8 h-8"
-                  />
-                  <span className={`font-medium ${getTeamColor(team).text}`}>
-                    {team.name}
-                  </span>
-                </div>
-              </button>
-            ))}
+        {/* Waiting Team */}
+        <div className="relative">
+          <div className="absolute left-1/2 transform -translate-x-1/2 -translate-y-4">
+            <BsHourglassSplit className="text-yellow-500 text-4xl animate-pulse" />
           </div>
-        </div>
-
-        {/* Waiting Team Preview */}
-        <div className="border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Waiting Team</h3>
-          {getWaitingTeamId() ? (
-            <div className="p-4 rounded-lg bg-gray-50">
-              {allTeams.map(team => team.id === getWaitingTeamId() && (
-                <div key={team.id} className="flex items-center gap-4">
-                  <FaTshirt 
-                    style={{ fill: getTeamColor(team).fill }}
-                    className="w-8 h-8 opacity-70"
-                  />
-                  <span className={`font-medium ${getTeamColor(team).text}`}>
-                    {team.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-4 rounded-lg bg-gray-50 text-gray-500">
-              Select home and away teams first
-            </div>
-          )}
+          {renderTeamSelector('waiting')}
         </div>
       </div>
 
       <div className="flex justify-center">
         <button
           onClick={handleStart}
-          disabled={!selectedTeams.home || !selectedTeams.away}
+          disabled={!selectedTeams.teamA || !selectedTeams.teamB || !selectedTeams.waiting}
           className="bg-green-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Start Match

@@ -51,6 +51,14 @@ interface MatchTimer {
   isRunning: boolean
 }
 
+interface Match {
+  id: string
+  homeTeam: Team
+  awayTeam: Team
+  waitingTeam: Team
+  events: Event[]
+}
+
 // Add these constants at the top of the file
 const GOALS_TO_WIN = 2;
 const OVERTIME_MINUTES = 2;
@@ -67,6 +75,78 @@ const EVENT_EMOJIS: { [key: string]: string } = {
 // Add this type for score tracking
 interface Score {
   [teamId: string]: number;
+}
+
+// Helper functions
+function getTeamColor(team: Team): { fill: string, text: string } {
+  // Define color mappings
+  const colorMap: { [key: string]: { fill: string, text: string } } = {
+    red: { fill: '#ef4444', text: 'text-red-500' },
+    blue: { fill: '#3b82f6', text: 'text-blue-500' },
+    green: { fill: '#22c55e', text: 'text-green-500' },
+    yellow: { fill: '#eab308', text: 'text-yellow-500' },
+    purple: { fill: '#a855f7', text: 'text-purple-500' },
+    pink: { fill: '#ec4899', text: 'text-pink-500' }
+  }
+
+  // Use the team's stored color or default to red
+  return colorMap[team.color || 'red'] || colorMap.red
+}
+
+// Function to get events since last rotation
+function getCurrentPlayEvents(events: Event[], teamId: string): Event[] {
+  if (!events.length) return [];
+
+  // Get all events in chronological order
+  const sortedEvents = [...events].sort((a: Event, b: Event) => 
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  // Find the last WIN event
+  const lastWinEvent = [...sortedEvents].reverse().find(event => event.type === "WIN");
+  
+  if (!lastWinEvent) {
+    // If no WIN event, we're in the first match - return all events for this team
+    return sortedEvents.filter(event => event.team === teamId && event.type !== "WIN");
+  }
+
+  // Get the index of the last WIN event
+  const lastWinIndex = sortedEvents.findIndex(event => event.id === lastWinEvent.id);
+  
+  // Get all events after the last WIN event (not including the WIN event)
+  const eventsAfterLastWin = sortedEvents.slice(lastWinIndex + 1);
+
+  // Return only events for this team
+  return eventsAfterLastWin.filter(event => event.team === teamId && event.type !== "WIN");
+}
+
+// Add this function to calculate current scores
+function getCurrentScores(events: Event[]): Score {
+  const scores: Score = {};
+  
+  // Get events since last WIN event or team rotation
+  const sortedEvents = [...events].sort((a: Event, b: Event) => 
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+  
+  // Find the last event that indicates a new game (WIN or team rotation)
+  const lastGameStartIndex = [...sortedEvents].reverse().findIndex(event => 
+    event.type === "WIN"
+  );
+  
+  // If found, get events since that point, otherwise use all events
+  const relevantEvents = lastGameStartIndex === -1 
+    ? sortedEvents 
+    : sortedEvents.slice(sortedEvents.length - lastGameStartIndex);
+  
+  // Count goals for the current game
+  relevantEvents.forEach(event => {
+    if (event.type === "GOAL") {
+      scores[event.team] = (scores[event.team] || 0) + 1;
+    }
+  });
+  
+  return scores;
 }
 
 // Fetcher function for SWR
@@ -87,9 +167,12 @@ export function FixtureClient({
   seasonId: string
   fixtureId: string
 }) {
+  // All hooks must be at the top level
   const [error, setError] = useState<string | null>(null)
   const [showEventModal, setShowEventModal] = useState(false)
   const [isOvertime, setIsOvertime] = useState(false)
+  const [showOvertimePrompt, setShowOvertimePrompt] = useState(false)
+  const [showWinnerSelectionPrompt, setShowWinnerSelectionPrompt] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<{
     type: string
     playerId: string | null
@@ -102,87 +185,153 @@ export function FixtureClient({
     team: null
   })
 
-  // Match timer state with localStorage persistence
+  // Add players state
+  const [players, setPlayers] = useState<Player[]>([])
+
+  // Match timer state with initial values
   const [timer, setTimer] = useState<MatchTimer>(() => {
-    if (typeof window === 'undefined') return { minutes: 8, seconds: 0, isRunning: false };
+    return { minutes: 8, seconds: 0, isRunning: false };
+  });
+
+  // Effect to handle timer restoration from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     
     const savedTimer = localStorage.getItem(`fixture_timer_${fixtureId}`);
-    if (!savedTimer) return { minutes: 8, seconds: 0, isRunning: false };
-    
+    if (!savedTimer) return;
+
     try {
       const parsed = JSON.parse(savedTimer);
       const savedTime = new Date(parsed.lastUpdated);
       const now = new Date();
       const elapsedSeconds = Math.floor((now.getTime() - savedTime.getTime()) / 1000);
-      
+
       if (parsed.isRunning && elapsedSeconds > 0) {
         // Calculate remaining time
         const totalSeconds = (parsed.minutes * 60 + parsed.seconds) - elapsedSeconds;
         if (totalSeconds <= 0) {
-          return { minutes: 0, seconds: 0, isRunning: false };
+          setTimer({ minutes: 0, seconds: 0, isRunning: false });
+        } else {
+          setTimer({
+            minutes: Math.floor(totalSeconds / 60),
+            seconds: totalSeconds % 60,
+            isRunning: true
+          });
         }
-        return {
-          minutes: Math.floor(totalSeconds / 60),
-          seconds: totalSeconds % 60,
-          isRunning: true
-        };
+      } else {
+        setTimer({
+          minutes: parsed.minutes,
+          seconds: parsed.seconds,
+          isRunning: parsed.isRunning
+        });
       }
-      
-      return {
-        minutes: parsed.minutes,
-        seconds: parsed.seconds,
-        isRunning: parsed.isRunning
-      };
-    } catch {
-      return { minutes: 8, seconds: 0, isRunning: false };
+    } catch (error) {
+      console.error('Error parsing saved timer:', error);
     }
-  });
+  }, [fixtureId]);
 
   // Create a stable URL using memoization
   const fixtureUrl = useMemo(() => 
     `/api/leagues/${id}/seasons/${seasonId}/fixtures/${fixtureId}`,
     [id, seasonId, fixtureId]
-  )
+  );
 
-  // Use SWR for data fetching
+  // Use SWR for data fetching with revalidation disabled
   const { data: fixture, mutate } = useSWR<Fixture>(fixtureUrl, fetcher, {
     fallbackData: initialFixture,
-    revalidateOnFocus: false
-  })
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    refreshInterval: 0
+  });
 
-  // Save timer state to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`fixture_timer_${fixtureId}`, JSON.stringify({
-        ...timer,
-        lastUpdated: new Date().toISOString()
-      }));
+  // Get current match
+  const currentMatch = fixture?.matches?.[0]
+
+  const handleStartMatch = async (homeName: string, awayName: string, waitingName: string) => {
+    try {
+      if (!fixture) {
+        throw new Error("Fixture data not found");
+      }
+
+      // Get saved team configurations from localStorage
+      const savedTeams = localStorage.getItem(`fixture_teams_${fixtureId}`);
+      if (!savedTeams) {
+        throw new Error("Team configurations not found");
+      }
+
+      const teamConfigs = JSON.parse(savedTeams);
+
+      const response = await fetch(`${fixtureUrl}/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          homeTeam: {
+            name: homeName,
+            color: teamConfigs.homeTeam.color || "red",
+            players: teamConfigs.homeTeam.players || []
+          },
+          awayTeam: {
+            name: awayName,
+            color: teamConfigs.awayTeam.color || "blue",
+            players: teamConfigs.awayTeam.players || []
+          },
+          waitingTeam: {
+            name: waitingName,
+            color: teamConfigs.waitingTeam.color || "green",
+            players: teamConfigs.waitingTeam.players || []
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const updatedFixture = await response.json();
+      await mutate(updatedFixture, false);
+    } catch (error) {
+      console.error("Failed to start match:", error);
+      setError(error instanceof Error ? error.message : "Failed to start match");
     }
-  }, [timer, fixtureId]);
+  };
 
-  // Clear timer when fixture is finished
-  useEffect(() => {
-    if (fixture?.status === 'FINISHED' && typeof window !== 'undefined') {
+  const handleEndFixture = async () => {
+    try {
+      const response = await fetch(`${fixtureUrl}/end`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      // Clean up localStorage
+      localStorage.removeItem(`fixture_teams_${fixtureId}`);
       localStorage.removeItem(`fixture_timer_${fixtureId}`);
-    }
-  }, [fixture?.status, fixtureId]);
 
-  // Handle beforeunload event to save state
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (timer.isRunning) {
+      const updatedFixture = await response.json();
+      await mutate(updatedFixture, false);
+    } catch (error) {
+      console.error("Failed to end fixture:", error);
+      setError(error instanceof Error ? error.message : "Failed to end fixture");
+    }
+  };
+
+  const handleStartPauseTimer = () => {
+    setTimer(prev => {
+      const newTimer = { ...prev, isRunning: !prev.isRunning };
+      // Save to localStorage with timestamp
+      if (typeof window !== 'undefined') {
         localStorage.setItem(`fixture_timer_${fixtureId}`, JSON.stringify({
-          ...timer,
-          lastUpdated: new Date().toISOString()
+          ...newTimer,
+          lastUpdated: new Date().toISOString(),
+          fixtureStatus: fixture?.status
         }));
       }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [timer, fixtureId]);
+      return newTimer;
+    });
+  };
 
   const handleOvertime = () => {
     setTimer(prev => ({
@@ -196,11 +345,10 @@ export function FixtureClient({
 
   const handleWinningTeam = useCallback(async (winningTeamId: string, losingTeamId: string) => {
     try {
-      if (!fixture?.matches?.[0]) throw new Error("Match not found");
-      const match = fixture.matches[0];
+      if (!currentMatch) throw new Error("No active match found");
       
       // First record the win event
-      const matchId = match.id;
+      const matchId = currentMatch.id;
       if (!matchId) throw new Error("Match ID not found");
 
       const winEvent = {
@@ -226,9 +374,9 @@ export function FixtureClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          winningTeamId,
-          losingTeamId,
-          newWaitingTeamId: match.waitingTeam.id
+          winningTeamId: winningTeamId,         // Winner stays as home team
+          losingTeamId: losingTeamId,           // Loser becomes waiting team
+          newWaitingTeamId: currentMatch.waitingTeam.id  // Waiting team becomes away team
         })
       });
 
@@ -252,22 +400,169 @@ export function FixtureClient({
         }));
       }
 
-      // Reset overtime state
+      // Refresh the fixture data
+      await mutate();
       setIsOvertime(false);
-
-      const updatedFixture = await response.json();
-      await mutate(updatedFixture, false);
     } catch (error) {
-      console.error("Failed to rotate teams:", error);
-      setError(error instanceof Error ? error.message : "Failed to rotate teams");
+      console.error('Error handling winning team:', error);
+      setError(error instanceof Error ? error.message : 'Failed to handle winning team');
     }
-  }, [fixture, fixtureUrl, fixtureId, mutate]);
+  }, [currentMatch, fixtureUrl, fixtureId, mutate]);
+
+  const handleRecordEvent = async () => {
+    try {
+      if (!currentMatch) throw new Error("No active match found");
+      if (!selectedEvent.type) throw new Error("No event type selected");
+      if (!selectedEvent.playerId && selectedEvent.type !== "WIN") {
+        throw new Error("Player must be selected for this event type");
+      }
+      
+      const matchId = currentMatch.id;
+      if (!matchId) throw new Error("Match ID not found");
+
+      // Find the selected player's data
+      const selectedPlayer = currentMatch.homeTeam.players
+        .concat(currentMatch.awayTeam.players)
+        .concat(currentMatch.waitingTeam.players)
+        .find(p => p.player.id === selectedEvent.playerId);
+
+      // Find the assist player's data if there is one
+      const assistPlayer = selectedEvent.assistPlayerId ? 
+        currentMatch.homeTeam.players
+          .concat(currentMatch.awayTeam.players)
+          .concat(currentMatch.waitingTeam.players)
+          .find(p => p.player.id === selectedEvent.assistPlayerId) : null;
+
+      // Create array to hold events
+      interface EventWithPlayer {
+        id: string;
+        type: string;
+        playerId: string;
+        assistPlayerId?: string;
+        matchId: string;
+        team: string;
+        createdAt: string;
+        player: {
+          id: string;
+          name: string;
+        } | null;
+      }
+
+      const events: EventWithPlayer[] = [];
+
+      // Create the main event object
+      const mainEvent = {
+        id: `temp-${Date.now()}`, // Temporary ID for optimistic update
+        type: selectedEvent.type,
+        playerId: selectedEvent.playerId || "",
+        assistPlayerId: selectedEvent.assistPlayerId || "",
+        matchId: matchId,
+        team: selectedEvent.team || "",
+        createdAt: new Date().toISOString(),
+        player: selectedPlayer ? {
+          id: selectedPlayer.player.id,
+          name: selectedPlayer.player.name
+        } : null
+      };
+      events.push(mainEvent);
+
+      // If this is a goal with an assist, create the assist event
+      if (selectedEvent.type === "GOAL" && assistPlayer) {
+        const assistEvent = {
+          id: `temp-assist-${Date.now()}`,
+          type: "ASSIST",
+          playerId: assistPlayer.player.id,
+          matchId: matchId,
+          team: selectedEvent.team || "",
+          createdAt: new Date().toISOString(),
+          player: {
+            id: assistPlayer.player.id,
+            name: assistPlayer.player.name
+          }
+        };
+        events.push(assistEvent);
+      }
+
+      // Update the local state first before making the API call
+      setSelectedEvent({
+        type: "",
+        playerId: null,
+        assistPlayerId: null,
+        team: null
+      });
+      setShowEventModal(false);
+
+      // Record the events
+      const response = await fetch(`${fixtureUrl}/events/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ events })
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      // Get the updated fixture data
+      const updatedFixture = await response.json();
+      
+      // Update the SWR cache with optimistic data
+      await mutate(
+        (currentData) => {
+          // If there's no current data, use the updated fixture
+          if (!currentData) return updatedFixture;
+          
+          // Otherwise, merge the new events into the current data
+          return {
+            ...currentData,
+            matches: currentData.matches.map((match: any) => {
+              if (match.id === matchId) {
+                return {
+                  ...match,
+                  events: [...match.events, ...events]
+                };
+              }
+              return match;
+            })
+          };
+        },
+        {
+          revalidate: false,
+          populateCache: true,
+          rollbackOnError: true
+        }
+      );
+
+      // Explicitly check win conditions after recording a goal
+      if (selectedEvent.type === "GOAL" && currentMatch.homeTeam && currentMatch.awayTeam) {
+        const currentScores = getCurrentScores(currentMatch.events);
+        const homeScore = currentScores[currentMatch.homeTeam.id] || 0;
+        const awayScore = currentScores[currentMatch.awayTeam.id] || 0;
+        
+        // Add the new goal to the score
+        const finalHomeScore = selectedEvent.team === currentMatch.homeTeam.id ? homeScore + 1 : homeScore;
+        const finalAwayScore = selectedEvent.team === currentMatch.awayTeam.id ? awayScore + 1 : awayScore;
+        
+        if (finalHomeScore >= GOALS_TO_WIN || finalAwayScore >= GOALS_TO_WIN) {
+          const winningTeamId = finalHomeScore >= GOALS_TO_WIN 
+            ? currentMatch.homeTeam.id 
+            : currentMatch.awayTeam.id;
+          const losingTeamId = winningTeamId === currentMatch.homeTeam.id 
+            ? currentMatch.awayTeam.id 
+            : currentMatch.homeTeam.id;
+          await handleWinningTeam(winningTeamId, losingTeamId);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to record event:", error);
+      setError(error instanceof Error ? error.message : "Failed to record event");
+    }
+  };
 
   const checkWinConditions = useCallback((homeTeamId: string, awayTeamId: string) => {
-    if (!fixture?.matches?.[0]) return;
+    if (!currentMatch) return;
     
-    const match = fixture.matches[0];
-    const scores = getCurrentScores(match.events);
+    const scores = getCurrentScores(currentMatch.events);
     
     // Check if either team has reached the win condition
     if (scores[homeTeamId] >= GOALS_TO_WIN || scores[awayTeamId] >= GOALS_TO_WIN) {
@@ -278,14 +573,13 @@ export function FixtureClient({
       // If time is up and no winner, go to overtime
       handleOvertime();
     }
-  }, [fixture, timer.minutes, timer.seconds, handleWinningTeam]);
+  }, [currentMatch, timer.minutes, timer.seconds, handleWinningTeam]);
 
   // Timer effect with persistence
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined = undefined;
     
-    if (timer.isRunning && fixture?.matches?.[0]) {
-      const match = fixture.matches[0];
+    if (timer.isRunning && currentMatch && fixture?.status === 'IN_PROGRESS') {
       interval = setInterval(() => {
         setTimer(prev => {
           const newTimer = { ...prev };
@@ -294,7 +588,7 @@ export function FixtureClient({
             newTimer.isRunning = false;
             if (interval) clearInterval(interval);
             // Check win conditions when time runs out
-            checkWinConditions(match.homeTeam.id, match.awayTeam.id);
+            checkWinConditions(currentMatch.homeTeam.id, currentMatch.awayTeam.id);
           } else if (prev.seconds === 0) {
             newTimer.minutes = prev.minutes - 1;
             newTimer.seconds = 59;
@@ -302,11 +596,12 @@ export function FixtureClient({
             newTimer.seconds = prev.seconds - 1;
           }
           
-          // Save to localStorage
+          // Save to localStorage with timestamp and fixture status
           if (typeof window !== 'undefined') {
             localStorage.setItem(`fixture_timer_${fixtureId}`, JSON.stringify({
               ...newTimer,
-              lastUpdated: new Date().toISOString()
+              lastUpdated: new Date().toISOString(),
+              fixtureStatus: fixture?.status
             }));
           }
           
@@ -318,231 +613,136 @@ export function FixtureClient({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [timer.isRunning, fixtureId, fixture, checkWinConditions]);
+  }, [timer.isRunning, fixtureId, currentMatch, fixture?.status, checkWinConditions]);
 
-  // Debug logging effect
+  // Clean up timer when fixture status changes
   useEffect(() => {
-    if (fixture?.matches?.[0]) {
-      const match = fixture.matches[0];
-      console.log('All events:', match.events)
-      console.log('Current play events (home):', getCurrentPlayEvents(match.events, match.homeTeam.id))
-      console.log('Current play events (away):', getCurrentPlayEvents(match.events, match.awayTeam.id))
-      console.log('Current play events (waiting):', getCurrentPlayEvents(match.events, match.waitingTeam.id))
+    if (fixture?.status !== 'IN_PROGRESS') {
+      localStorage.removeItem(`fixture_timer_${fixtureId}`);
+      setTimer({ minutes: 8, seconds: 0, isRunning: false });
     }
-  }, [fixture?.matches]);
+  }, [fixture?.status, fixtureId]);
 
-  const handleStartMatch = async (homeTeamId: string, awayTeamId: string, waitingTeamId: string) => {
-    try {
-      const response = await fetch(`${fixtureUrl}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          homeTeamId,
-          awayTeamId,
-          waitingTeamId
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error(await response.text())
-      }
-
-      const updatedFixture = await response.json()
-      await mutate(updatedFixture, false)
-    } catch (error) {
-      console.error("Failed to start match:", error)
-      setError(error instanceof Error ? error.message : "Failed to start match")
-    }
-  }
-
-  const handleRecordEvent = async () => {
-    if (!selectedEvent.type || !selectedEvent.playerId || !selectedEvent.team) {
-      setError("Please select an event type and player")
-      return
-    }
-
-    try {
-      setShowEventModal(false)
-
-      const matchId = fixture?.matches[0].id
-      if (!matchId) throw new Error("Match ID not found")
-
-      const events = []
-
-      // Prepare events
-      const newEvent = {
-        type: selectedEvent.type,
-        playerId: selectedEvent.playerId,
-        matchId: matchId,
-        team: selectedEvent.team
-      }
-      events.push(newEvent)
-
-      if (selectedEvent.type === "GOAL" && selectedEvent.assistPlayerId) {
-        events.push({
-          type: "ASSIST",
-          playerId: selectedEvent.assistPlayerId,
-          matchId: matchId,
-          team: selectedEvent.team
-        })
-      }
-
-      // API call first
-      const response = await fetch(`${fixtureUrl}/events/batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ events })
-      })
-
-      if (!response.ok) {
-        throw new Error(await response.text())
-      }
-
-      // Update with server response
-      const updatedFixture = await response.json()
-      await mutate(updatedFixture, false)
-
-      // Reset selection and error
-      setSelectedEvent({ type: "", playerId: null, assistPlayerId: null, team: null })
-      setError(null)
-    } catch (error) {
-      console.error("Failed to record events:", error)
-      setError(error instanceof Error ? error.message : "Failed to record events")
-      // Revalidate to get the correct state
-      mutate()
-    }
-  }
-
-  const handleStartPauseTimer = () => {
-    setTimer(prev => {
-      const newTimer = { ...prev, isRunning: !prev.isRunning };
-      // Save to localStorage
-      if (typeof window !== 'undefined') {
+  // Handle beforeunload and visibilitychange events
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (timer.isRunning && fixture?.status === 'IN_PROGRESS') {
         localStorage.setItem(`fixture_timer_${fixtureId}`, JSON.stringify({
-          ...newTimer,
-          lastUpdated: new Date().toISOString()
+          ...timer,
+          lastUpdated: new Date().toISOString(),
+          fixtureStatus: fixture?.status
         }));
       }
-      return newTimer;
-    });
-  };
+    };
 
-  // Function to get events since last rotation
-  const getCurrentPlayEvents = (events: Event[], teamId: string) => {
-    if (!events.length) return [];
-
-    // Get all events in chronological order
-    const sortedEvents = [...events].sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-
-    // Find the last WIN event
-    const lastWinEvent = [...sortedEvents].reverse().find(event => event.type === "WIN");
-    
-    if (!lastWinEvent) {
-      // If no WIN event, we're in the first match - return all events for this team
-      return sortedEvents.filter(event => event.team === teamId && event.type !== "WIN");
-    }
-
-    // Get the index of the last WIN event
-    const lastWinIndex = sortedEvents.findIndex(event => event.id === lastWinEvent.id);
-    
-    // Get all events after the last WIN event (not including the WIN event)
-    const eventsAfterLastWin = sortedEvents.slice(lastWinIndex + 1);
-
-    // Return only events for this team
-    return eventsAfterLastWin.filter(event => event.team === teamId && event.type !== "WIN");
-  }
-
-  function getTeamColor(team: Team): { fill: string, text: string } {
-    // Define color mappings
-    const colorMap: { [key: string]: { fill: string, text: string } } = {
-      red: { fill: '#ef4444', text: 'text-red-500' },
-      blue: { fill: '#3b82f6', text: 'text-blue-500' },
-      green: { fill: '#22c55e', text: 'text-green-500' },
-      yellow: { fill: '#eab308', text: 'text-yellow-500' },
-      purple: { fill: '#a855f7', text: 'text-purple-500' },
-      pink: { fill: '#ec4899', text: 'text-pink-500' }
-    }
-
-    // Use the team's stored color or default to red
-    return colorMap[team.color || 'red'] || colorMap.red
-  }
-
-  const handleEndFixture = async () => {
-    try {
-      const response = await fetch(`${fixtureUrl}/end`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && timer.isRunning && fixture?.status === 'IN_PROGRESS') {
+        localStorage.setItem(`fixture_timer_${fixtureId}`, JSON.stringify({
+          ...timer,
+          lastUpdated: new Date().toISOString(),
+          fixtureStatus: fixture?.status
+        }));
       }
+    };
 
-      const updatedFixture = await response.json();
-      await mutate(updatedFixture, false);
-    } catch (error) {
-      console.error("Failed to end fixture:", error);
-      setError(error instanceof Error ? error.message : "Failed to end fixture");
-    }
-  };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [timer, fixtureId, fixture?.status]);
 
-  // Add these states after other states
-  const [showOvertimePrompt, setShowOvertimePrompt] = useState(false);
-  const [showWinnerSelectionPrompt, setShowWinnerSelectionPrompt] = useState(false);
+  // Determine fixture state
+  const isWaitingToStart = fixture?.status === "WAITING_TO_START"
+  const isInProgress = fixture?.status === "IN_PROGRESS"
+  const isCompleted = fixture?.status === "COMPLETED"
 
-  // Add this function to calculate current scores
-  const getCurrentScores = (events: Event[]): Score => {
-    const scores: Score = {};
-    
-    // Get events since last WIN event or team rotation
-    const sortedEvents = [...events].sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-    
-    // Find the last event that indicates a new game (WIN or team rotation)
-    const lastGameStartIndex = [...sortedEvents].reverse().findIndex(event => 
-      event.type === "WIN"
-    );
-    
-    // If found, get events since that point, otherwise use all events
-    const relevantEvents = lastGameStartIndex === -1 
-      ? sortedEvents 
-      : sortedEvents.slice(sortedEvents.length - lastGameStartIndex);
-    
-    // Count goals for the current game
-    relevantEvents.forEach(event => {
-      if (event.type === "GOAL") {
-        scores[event.team] = (scores[event.team] || 0) + 1;
+  // Fetch players
+  useEffect(() => {
+    const fetchPlayers = async () => {
+      try {
+        const response = await fetch(`/api/leagues/${id}/players`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch players')
+        }
+        const data = await response.json()
+        setPlayers(data)
+      } catch (error) {
+        console.error('Failed to fetch players:', error)
+        setError(error instanceof Error ? error.message : 'Failed to fetch players')
       }
-    });
-    
-    return scores;
-  };
+    }
 
-  if (!fixture) {
-    return <div className="text-center p-6">Loading...</div>
+    fetchPlayers()
+  }, [id])
+
+  // Return early if no match is found
+  if (!currentMatch) {
+    // Load team configurations from localStorage
+    const savedTeams = typeof window !== 'undefined' ? localStorage.getItem(`fixture_teams_${fixtureId}`) : null;
+    let initialTeams = {
+      homeTeam: { name: 'Red Team', color: 'red', players: [] },
+      awayTeam: { name: 'Blue Team', color: 'blue', players: [] },
+      waitingTeam: { name: 'Green Team', color: 'green', players: [] }
+    };
+
+    if (savedTeams) {
+      try {
+        initialTeams = JSON.parse(savedTeams);
+      } catch (error) {
+        console.error('Error parsing saved teams:', error);
+      }
+    }
+
+    const emptyMatch: Match = {
+            id: '',
+            homeTeam: {
+              id: 'home',
+              name: initialTeams.homeTeam.name,
+              color: initialTeams.homeTeam.color,
+              players: players.map(p => ({ player: p }))
+            },
+            awayTeam: {
+              id: 'away',
+              name: initialTeams.awayTeam.name,
+              color: initialTeams.awayTeam.color,
+              players: players.map(p => ({ player: p }))
+            },
+            waitingTeam: {
+              id: 'waiting',
+              name: initialTeams.waitingTeam.name,
+              color: initialTeams.waitingTeam.color,
+              players: players.map(p => ({ player: p }))
+      },
+      events: []
+    };
+
+    return (
+      <div className="p-4 text-center">
+        <TeamSelection 
+          match={emptyMatch}
+          onStart={handleStartMatch}
+          fixtureId={fixtureId}
+        />
+      </div>
+    )
   }
-
-  const match = fixture.matches[0]
-  
-  // Determine if match has started based on events or status
-  const hasStarted = fixture.status === "IN_PROGRESS" || match.events.length > 0;
-  const isFinished = fixture.status === "FINISHED";
 
   // Show team selection if match hasn't started
-  if (!hasStarted) {
+  if (isWaitingToStart) {
     return (
       <TeamSelection 
-        match={match} 
+        match={currentMatch} 
         onStart={handleStartMatch}
+        fixtureId={fixtureId}
       />
     )
   }
 
-  // If the match is finished, show a message
-  if (isFinished) {
+  // If the match is finished, show the final results
+  if (isCompleted) {
     return (
       <div className="container mx-auto p-6 bg-white">
         <div className="text-center mb-6">
@@ -567,18 +767,18 @@ export function FixtureClient({
                 </tr>
               </thead>
               <tbody>
-                {[match.homeTeam, match.awayTeam, match.waitingTeam].map((team) => {
-                  const teamEvents = match.events.filter(
-                    (event) => event.team === team.id
+                {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team) => {
+                  const teamEvents = currentMatch.events.filter(
+                    (event: Event) => event.team === team.id
                   )
                   const goals = teamEvents.filter(
-                    (event) => event.type === "GOAL"
+                    (event: Event) => event.type === "GOAL"
                   ).length
                   const saves = teamEvents.filter(
-                    (event) => event.type === "SAVE"
+                    (event: Event) => event.type === "SAVE"
                   ).length
-                  const wins = match.events.filter(
-                    (event) => event.type === "WIN" && event.team === team.id
+                  const wins = currentMatch.events.filter(
+                    (event: Event) => event.type === "WIN" && event.team === team.id
                   ).length
 
                   return (
@@ -607,18 +807,18 @@ export function FixtureClient({
                 </tr>
               </thead>
               <tbody>
-                {[...match.homeTeam.players, ...match.awayTeam.players, ...match.waitingTeam.players].map((teamPlayer) => {
-                  const playerEvents = match.events.filter(
-                    (event) => event.playerId === teamPlayer.player.id
+                {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer) => {
+                  const playerEvents = currentMatch.events.filter(
+                    (event: Event) => event.playerId === teamPlayer.player.id
                   )
                   const goals = playerEvents.filter(
-                    (event) => event.type === "GOAL"
+                    (event: Event) => event.type === "GOAL"
                   ).length
                   const assists = playerEvents.filter(
-                    (event) => event.type === "ASSIST"
+                    (event: Event) => event.type === "ASSIST"
                   ).length
                   const saves = playerEvents.filter(
-                    (event) => event.type === "SAVE"
+                    (event: Event) => event.type === "SAVE"
                   ).length
 
                   return (
@@ -638,6 +838,7 @@ export function FixtureClient({
     );
   }
 
+  // If not waiting to start and not completed, show the in-progress match
   return (
     <div className="container mx-auto p-6 bg-white">
       <div className="flex justify-between items-center mb-6">
@@ -676,12 +877,12 @@ export function FixtureClient({
       {/* Score Display */}
       <div className="mb-6 text-center">
         <div className="text-3xl font-bold text-gray-900 flex items-center justify-center space-x-4">
-          <span className={getTeamColor(match.homeTeam).text}>
-            {getCurrentScores(match.events)[match.homeTeam.id] || 0}
+          <span className={getTeamColor(currentMatch.homeTeam).text}>
+            {getCurrentScores(currentMatch.events)[currentMatch.homeTeam.id] || 0}
           </span>
           <span className="text-gray-400">-</span>
-          <span className={getTeamColor(match.awayTeam).text}>
-            {getCurrentScores(match.events)[match.awayTeam.id] || 0}
+          <span className={getTeamColor(currentMatch.awayTeam).text}>
+            {getCurrentScores(currentMatch.events)[currentMatch.awayTeam.id] || 0}
           </span>
         </div>
       </div>
@@ -693,12 +894,12 @@ export function FixtureClient({
           <div className="text-center w-64">
             <div className="mb-2">
               <FaTshirt 
-                style={{ fill: getTeamColor(match.homeTeam).fill }} 
+                style={{ fill: getTeamColor(currentMatch.homeTeam).fill }} 
                 className={`w-16 h-16 mx-auto transition-colors duration-200`} 
               />
             </div>
-            <h3 className={`text-xl font-bold truncate ${getTeamColor(match.homeTeam).text}`}>
-              {match.homeTeam.name}
+            <h3 className={`text-xl font-bold truncate ${getTeamColor(currentMatch.homeTeam).text}`}>
+              {currentMatch.homeTeam.name}
             </h3>
             <button
               onClick={() => {
@@ -706,7 +907,7 @@ export function FixtureClient({
                   type: "",
                   playerId: null,
                   assistPlayerId: null,
-                  team: match.homeTeam.id
+                  team: currentMatch.homeTeam.id
                 })
                 setShowEventModal(true)
               }}
@@ -717,7 +918,7 @@ export function FixtureClient({
             {/* Home Team Current Play Events */}
             <div className="mt-4 bg-gray-50 p-3 rounded-lg max-h-40 overflow-y-auto">
               <h4 className="text-sm font-medium text-gray-700 mb-2">Current Play Events</h4>
-              {getCurrentPlayEvents(match.events, match.homeTeam.id)
+              {getCurrentPlayEvents(currentMatch.events, currentMatch.homeTeam.id)
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .map(event => (
                   <div key={event.id} className="text-sm text-gray-600 mb-1">
@@ -738,12 +939,12 @@ export function FixtureClient({
           <div className="text-center w-64">
             <div className="mb-2">
               <FaTshirt 
-                style={{ fill: getTeamColor(match.awayTeam).fill }} 
+                style={{ fill: getTeamColor(currentMatch.awayTeam).fill }} 
                 className={`w-16 h-16 mx-auto transition-colors duration-200`} 
               />
             </div>
-            <h3 className={`text-xl font-bold truncate ${getTeamColor(match.awayTeam).text}`}>
-              {match.awayTeam.name}
+            <h3 className={`text-xl font-bold truncate ${getTeamColor(currentMatch.awayTeam).text}`}>
+              {currentMatch.awayTeam.name}
             </h3>
             <button
               onClick={() => {
@@ -751,7 +952,7 @@ export function FixtureClient({
                   type: "",
                   playerId: null,
                   assistPlayerId: null,
-                  team: match.awayTeam.id
+                  team: currentMatch.awayTeam.id
                 })
                 setShowEventModal(true)
               }}
@@ -762,7 +963,7 @@ export function FixtureClient({
             {/* Away Team Current Play Events */}
             <div className="mt-4 bg-gray-50 p-3 rounded-lg max-h-40 overflow-y-auto">
               <h4 className="text-sm font-medium text-gray-700 mb-2">Current Play Events</h4>
-              {getCurrentPlayEvents(match.events, match.awayTeam.id)
+              {getCurrentPlayEvents(currentMatch.events, currentMatch.awayTeam.id)
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .map(event => (
                   <div key={event.id} className="text-sm text-gray-600 mb-1">
@@ -782,21 +983,21 @@ export function FixtureClient({
           <div className="inline-block bg-gray-100 rounded-lg p-4">
             <div className="mb-2 relative">
               <FaTshirt 
-                style={{ fill: getTeamColor(match.waitingTeam).fill }}
+                style={{ fill: getTeamColor(currentMatch.waitingTeam).fill }}
                 className="w-12 h-12 mx-auto opacity-70 transform transition-all duration-300 hover:opacity-100"
               />
               <div className="absolute -top-1 -right-1 bg-yellow-400 rounded-full w-5 h-5 flex items-center justify-center">
                 <span className="text-xs font-bold text-gray-900">⏳</span>
               </div>
             </div>
-            <h3 className={`text-lg font-bold max-w-[200px] truncate mx-auto flex items-center justify-center gap-2 ${getTeamColor(match.waitingTeam).text}`}>
+            <h3 className={`text-lg font-bold max-w-[200px] truncate mx-auto flex items-center justify-center gap-2 ${getTeamColor(currentMatch.waitingTeam).text}`}>
               <span className="text-gray-900">Waiting:</span>
-              <span>{match.waitingTeam.name}</span>
+              <span>{currentMatch.waitingTeam.name}</span>
             </h3>
             {/* Waiting Team Current Play Events */}
             <div className="mt-2 bg-white/50 p-2 rounded-lg max-h-32 overflow-y-auto">
               <h4 className="text-sm font-medium text-gray-700 mb-2">Current Play Events</h4>
-              {getCurrentPlayEvents(match.events, match.waitingTeam.id)
+              {getCurrentPlayEvents(currentMatch.events, currentMatch.waitingTeam.id)
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .map(event => (
                   <div key={event.id} className="text-sm text-gray-600 mb-1">
@@ -845,29 +1046,29 @@ export function FixtureClient({
             <div className="space-y-3">
               <button
                 onClick={() => {
-                  handleWinningTeam(match.homeTeam.id, match.awayTeam.id);
+                  handleWinningTeam(currentMatch.homeTeam.id, currentMatch.awayTeam.id);
                   setShowWinnerSelectionPrompt(false);
                 }}
-                className={`w-full p-4 rounded-lg border-2 transition-colors ${getTeamColor(match.homeTeam).text} hover:bg-gray-50`}
+                className={`w-full p-4 rounded-lg border-2 transition-colors ${getTeamColor(currentMatch.homeTeam).text} hover:bg-gray-50`}
               >
                 <FaTshirt 
-                  style={{ fill: getTeamColor(match.homeTeam).fill }} 
+                  style={{ fill: getTeamColor(currentMatch.homeTeam).fill }} 
                   className="w-8 h-8 mx-auto mb-2" 
                 />
-                {match.homeTeam.name}
+                {currentMatch.homeTeam.name}
               </button>
               <button
                 onClick={() => {
-                  handleWinningTeam(match.awayTeam.id, match.homeTeam.id);
+                  handleWinningTeam(currentMatch.awayTeam.id, currentMatch.homeTeam.id);
                   setShowWinnerSelectionPrompt(false);
                 }}
-                className={`w-full p-4 rounded-lg border-2 transition-colors ${getTeamColor(match.awayTeam).text} hover:bg-gray-50`}
+                className={`w-full p-4 rounded-lg border-2 transition-colors ${getTeamColor(currentMatch.awayTeam).text} hover:bg-gray-50`}
               >
                 <FaTshirt 
-                  style={{ fill: getTeamColor(match.awayTeam).fill }} 
+                  style={{ fill: getTeamColor(currentMatch.awayTeam).fill }} 
                   className="w-8 h-8 mx-auto mb-2" 
                 />
-                {match.awayTeam.name}
+                {currentMatch.awayTeam.name}
               </button>
             </div>
           </div>
@@ -910,10 +1111,10 @@ export function FixtureClient({
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900"
                 >
                   <option value="" className="text-gray-900">Select player</option>
-                  {[match.homeTeam, match.awayTeam]
+                  {[currentMatch.homeTeam, currentMatch.awayTeam]
                     .find(team => team.id === selectedEvent.team)
                     ?.players.map((teamPlayer) => (
-                      <option key={teamPlayer.player.id} value={teamPlayer.player.id} className="text-gray-900">
+                      <option key={`${teamPlayer.player.id}-${selectedEvent.team}`} value={teamPlayer.player.id} className="text-gray-900">
                         {teamPlayer.player.name}
                       </option>
                     ))}
@@ -930,10 +1131,10 @@ export function FixtureClient({
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900"
                   >
                     <option value="" className="text-gray-900">Select player</option>
-                    {[match.homeTeam, match.awayTeam]
+                    {[currentMatch.homeTeam, currentMatch.awayTeam]
                       .find(team => team.id === selectedEvent.team)
                       ?.players.map((teamPlayer) => (
-                        <option key={teamPlayer.player.id} value={teamPlayer.player.id} className="text-gray-900">
+                        <option key={`assist-${teamPlayer.player.id}-${selectedEvent.team}`} value={teamPlayer.player.id} className="text-gray-900">
                           {teamPlayer.player.name}
                         </option>
                       ))}
@@ -975,8 +1176,8 @@ export function FixtureClient({
               </tr>
             </thead>
             <tbody>
-              {[match.homeTeam, match.awayTeam, match.waitingTeam].map((team) => {
-                const teamEvents = match.events.filter(
+              {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team) => {
+                const teamEvents = currentMatch.events.filter(
                   (event) => event.team === team.id
                 )
                 const goals = teamEvents.filter(
@@ -986,7 +1187,7 @@ export function FixtureClient({
                   (event) => event.type === "SAVE"
                 ).length
                 // Calculate wins based on WIN events
-                const wins = match.events.filter(
+                const wins = currentMatch.events.filter(
                   (event) => event.type === "WIN" && event.team === team.id
                 ).length
 
@@ -1016,8 +1217,8 @@ export function FixtureClient({
               </tr>
             </thead>
             <tbody>
-              {[...match.homeTeam.players, ...match.awayTeam.players, ...match.waitingTeam.players].map((teamPlayer) => {
-                const playerEvents = match.events.filter(
+              {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer) => {
+                const playerEvents = currentMatch.events.filter(
                   (event) => event.playerId === teamPlayer.player.id
                 )
                 const goals = playerEvents.filter(

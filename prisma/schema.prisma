@@ -126,8 +126,8 @@ model Event {
   id              String    @id @default(cuid()) @map("_id")
   matchId         String
   match           Match     @relation(fields: [matchId], references: [id])
-  playerId        String
-  player          Player    @relation(fields: [playerId], references: [id])
+  playerId        String?
+  player          Player?   @relation(fields: [playerId], references: [id])
   type            String    // Goal, Save, Miss, Card, etc.
   subType         String?   // Penalty, Chip shot, etc.
   isHighlight     Boolean   @default(false)
