@@ -42,6 +42,14 @@ export async function POST(
     const params = await props.params
     const { id: leagueId, seasonId, fixtureId } = params
 
+    // Validate request body
+    const body = await request.json()
+    const result = startMatchSchema.safeParse(body)
+    
+    if (!result.success) {
+      return new NextResponse("Invalid request data", { status: 400 })
+    }
+
     // Verify the league and season exist and belong to the user
     const league = await prisma.league.findFirst({
       where: {

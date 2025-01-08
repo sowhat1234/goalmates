@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { FaTshirt } from "react-icons/fa"
 import { BsHourglassSplit } from "react-icons/bs"
 import { Event as PrismaEvent } from "@prisma/client"
@@ -45,7 +45,11 @@ interface TeamSelectionProps {
 }
 
 export function TeamSelection({ match, onStart, fixtureId }: TeamSelectionProps) {
-  const teams = [match.homeTeam, match.awayTeam, match.waitingTeam]
+  const teams = useMemo(() => [
+    match.homeTeam,
+    match.awayTeam,
+    match.waitingTeam
+  ], [match.homeTeam, match.awayTeam, match.waitingTeam])
   
   // Load initial team configurations from localStorage
   const [selectedTeams, setSelectedTeams] = useState<{

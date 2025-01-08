@@ -478,7 +478,7 @@ export function FixtureClient({
           // Otherwise, merge the new events into the current data
           return {
             ...currentData,
-            matches: currentData.matches.map((match: any) => {
+            matches: currentData.matches.map((match: Match) => {
               if (match.id === matchId) {
                 return {
                   ...match,
@@ -619,7 +619,6 @@ export function FixtureClient({
 
   // Determine fixture state
   const isWaitingToStart = fixture?.status === "WAITING_TO_START"
-  const isInProgress = fixture?.status === "IN_PROGRESS"
   const isCompleted = fixture?.status === "COMPLETED"
 
   // Fetch players
