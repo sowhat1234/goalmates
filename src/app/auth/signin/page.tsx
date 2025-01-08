@@ -5,12 +5,10 @@ import Image from "next/image"
 
 export default function SignIn() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white">
-      <div className="w-full max-w-md space-y-8 rounded-xl bg-white p-10 shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">
-            Sign in to GoalMates
-          </h2>
+          <h2 className="text-3xl font-bold text-gray-900">Sign in to GoalMates</h2>
           <p className="mt-2 text-sm text-gray-600">
             Start managing your sports leagues today
           </p>
@@ -19,16 +17,16 @@ export default function SignIn() {
         <div className="mt-8 space-y-4">
           <button
             onClick={() => signIn("google", { callbackUrl: "/" })}
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 transition hover:bg-gray-50"
+            className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <Image
               src="/google.svg"
-              alt="Google logo"
-              width={20}
-              height={20}
-              className="h-5 w-5"
+              alt="Google Logo"
+              width={24}
+              height={24}
+              className="mr-2"
             />
-            <span>Sign in with Google</span>
+            Sign in with Google
           </button>
         </div>
       </div>
