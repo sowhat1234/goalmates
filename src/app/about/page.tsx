@@ -12,7 +12,7 @@ export default function About() {
               About GoalMates
             </h1>
             <p className="mt-6 text-lg leading-8 text-gray-600">
-              GoalMates is your ultimate companion for organizing and managing sports leagues. Whether you're running a casual office tournament or a competitive local league, we've got you covered.
+              GoalMates is your ultimate companion for organizing and managing sports leagues. Whether you&apos;re running a casual office tournament or a competitive local league, we&apos;ve got you covered.
             </p>
           </div>
         </div>
