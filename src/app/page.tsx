@@ -4,11 +4,39 @@ import { useSession, signOut } from "next-auth/react"
 import Link from "next/link"
 import Image from 'next/image'
 import { FaTrophy, FaUsers, FaCalendarAlt, FaChartBar } from "react-icons/fa"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
+interface DashboardStats {
+  activeLeagues: number
+  totalPlayers: number
+  upcomingFixtures: number
+  totalMatches: number
+}
 
 export default function Home() {
   const { data: session, status } = useSession()
   const [showDropdown, setShowDropdown] = useState(false)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (session?.user) {
+        try {
+          const response = await fetch('/api/dashboard/stats')
+          if (!response.ok) throw new Error('Failed to fetch stats')
+          const data = await response.json()
+          setStats(data)
+        } catch (error) {
+          console.error('Error fetching dashboard stats:', error)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    fetchStats()
+  }, [session])
 
   // Show loading state while checking authentication
   if (status === "loading") {
@@ -109,6 +137,16 @@ export default function Home() {
 
         {/* Main Content */}
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          {/* Welcome Message */}
+          <div className="px-4 sm:px-0 mb-8">
+            <h1 className="text-2xl font-bold text-gray-900">
+              Welcome back, {session.user.name}!
+            </h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Here&apos;s an overview of your sports leagues and activities
+            </p>
+          </div>
+
           <div className="px-4 py-6 sm:px-0">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {/* Quick Stats Cards */}
@@ -121,10 +159,19 @@ export default function Home() {
                     <div className="ml-5 w-0 flex-1">
                       <dl>
                         <dt className="text-sm font-medium text-gray-500 truncate">Active Leagues</dt>
-                        <dd className="text-lg font-medium text-gray-900">5</dd>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {isLoading ? (
+                            <div className="animate-pulse h-6 w-12 bg-gray-200 rounded"></div>
+                          ) : (
+                            stats?.activeLeagues || 0
+                          )}
+                        </dd>
                       </dl>
                     </div>
                   </div>
+                </div>
+                <div className="bg-gray-50 px-5 py-3">
+                  <Link href="/dashboard/leagues" className="text-sm text-blue-600 hover:text-blue-900">View all leagues</Link>
                 </div>
               </div>
 
@@ -137,10 +184,19 @@ export default function Home() {
                     <div className="ml-5 w-0 flex-1">
                       <dl>
                         <dt className="text-sm font-medium text-gray-500 truncate">Total Players</dt>
-                        <dd className="text-lg font-medium text-gray-900">24</dd>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {isLoading ? (
+                            <div className="animate-pulse h-6 w-12 bg-gray-200 rounded"></div>
+                          ) : (
+                            stats?.totalPlayers || 0
+                          )}
+                        </dd>
                       </dl>
                     </div>
                   </div>
+                </div>
+                <div className="bg-gray-50 px-5 py-3">
+                  <Link href="/dashboard/players" className="text-sm text-blue-600 hover:text-blue-900">Manage players</Link>
                 </div>
               </div>
 
@@ -153,10 +209,19 @@ export default function Home() {
                     <div className="ml-5 w-0 flex-1">
                       <dl>
                         <dt className="text-sm font-medium text-gray-500 truncate">Upcoming Fixtures</dt>
-                        <dd className="text-lg font-medium text-gray-900">3</dd>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {isLoading ? (
+                            <div className="animate-pulse h-6 w-12 bg-gray-200 rounded"></div>
+                          ) : (
+                            stats?.upcomingFixtures || 0
+                          )}
+                        </dd>
                       </dl>
                     </div>
                   </div>
+                </div>
+                <div className="bg-gray-50 px-5 py-3">
+                  <Link href="/dashboard/fixtures" className="text-sm text-blue-600 hover:text-blue-900">View schedule</Link>
                 </div>
               </div>
 
@@ -169,10 +234,19 @@ export default function Home() {
                     <div className="ml-5 w-0 flex-1">
                       <dl>
                         <dt className="text-sm font-medium text-gray-500 truncate">Total Matches</dt>
-                        <dd className="text-lg font-medium text-gray-900">12</dd>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {isLoading ? (
+                            <div className="animate-pulse h-6 w-12 bg-gray-200 rounded"></div>
+                          ) : (
+                            stats?.totalMatches || 0
+                          )}
+                        </dd>
                       </dl>
                     </div>
                   </div>
+                </div>
+                <div className="bg-gray-50 px-5 py-3">
+                  <Link href="/dashboard/statistics" className="text-sm text-blue-600 hover:text-blue-900">View statistics</Link>
                 </div>
               </div>
             </div>
@@ -180,7 +254,7 @@ export default function Home() {
             {/* Quick Actions */}
             <div className="mt-8">
               <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Link
                   href="/dashboard/leagues/new"
                   className="relative block w-full rounded-lg border-2 border-dashed border-gray-300 p-12 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
@@ -194,6 +268,13 @@ export default function Home() {
                 >
                   <FaCalendarAlt className="mx-auto h-12 w-12 text-gray-400" />
                   <span className="mt-2 block text-sm font-medium text-gray-900">Schedule Fixture</span>
+                </Link>
+                <Link
+                  href="/dashboard/players/new"
+                  className="relative block w-full rounded-lg border-2 border-dashed border-gray-300 p-12 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                >
+                  <FaUsers className="mx-auto h-12 w-12 text-gray-400" />
+                  <span className="mt-2 block text-sm font-medium text-gray-900">Add New Player</span>
                 </Link>
               </div>
             </div>
