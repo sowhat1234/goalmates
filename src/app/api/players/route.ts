@@ -6,29 +6,44 @@ import { prisma } from "@/lib/prisma"
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
+    console.log("[PLAYERS_GET] Session:", {
+      id: session?.user?.id,
+      email: session?.user?.email,
+      name: session?.user?.name,
+    })
 
     if (!session?.user?.id) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const players = await prisma.player.findMany({
+    // First get all leagues to verify the query
+    const allLeagues = await prisma.league.findMany()
+    console.log("[PLAYERS_GET] All Leagues:", allLeagues)
+
+    // Then get leagues owned by the user
+    const userLeagues = await prisma.league.findMany({
       where: {
-        league: {
-          ownerId: session.user.id,
-        },
+        ownerId: session.user.id,
       },
       include: {
-        league: {
-          select: {
-            id: true,
-            name: true,
+        players: {
+          include: {
+            league: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
-      orderBy: {
-        name: 'asc',
-      },
     })
+
+    console.log("[PLAYERS_GET] User Leagues:", userLeagues)
+
+    // Flatten the players array from all leagues
+    const players = userLeagues.flatMap(league => league.players)
+    console.log("[PLAYERS_GET] Players:", players)
 
     // Fetch statistics for each player
     const playersWithStats = await Promise.all(
@@ -55,9 +70,10 @@ export async function GET() {
       })
     )
 
+    console.log("[PLAYERS_GET] Players with stats:", playersWithStats)
     return NextResponse.json(playersWithStats)
   } catch (error) {
-    console.error("[PLAYERS_GET]", error)
+    console.error("[PLAYERS_GET] Error:", error)
     return new NextResponse("Internal Error", { status: 500 })
   }
 } 

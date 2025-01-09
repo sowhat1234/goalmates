@@ -33,7 +33,7 @@ export default function DashboardLayout({
           <div className="flex h-16 justify-between">
             <div className="flex">
               <div className="flex flex-shrink-0 items-center">
-                <Link href="/dashboard" className="text-xl font-bold text-blue-600">
+                <Link href="/" className="text-xl font-bold text-blue-600">
                   GoalMates
                 </Link>
               </div>

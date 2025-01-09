@@ -1,29 +1,30 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
-import { z } from "zod"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-const createLeagueSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-})
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.id) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const json = await req.json()
-    const body = createLeagueSchema.parse(json)
+    const json = await request.json()
+    const { name, description } = json
+
+    if (!name || typeof name !== "string" || name.length < 1) {
+      return new NextResponse("Invalid name", { status: 400 })
+    }
+
+    if (description && typeof description !== "string") {
+      return new NextResponse("Invalid description", { status: 400 })
+    }
 
     const league = await prisma.league.create({
       data: {
-        name: body.name,
-        description: body.description,
+        name,
+        description,
         ownerId: session.user.id,
       },
     })
