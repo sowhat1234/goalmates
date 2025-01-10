@@ -36,7 +36,7 @@ export function PublicHeader() {
   const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'User'
 
   return (
-    <nav className="bg-white shadow">
+    <nav className="bg-white shadow relative z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex">
