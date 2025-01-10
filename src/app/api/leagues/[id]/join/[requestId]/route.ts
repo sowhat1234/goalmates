@@ -33,39 +33,66 @@ export async function PATCH(
       return new NextResponse("Invalid status", { status: 400 })
     }
 
-    // Update join request
-    const joinRequest = await prisma.joinRequest.update({
+    // Check if request is already processed
+    const existingRequest = await prisma.joinRequest.findUnique({
       where: {
         id: params.requestId,
-        leagueId: params.id,
-      },
-      data: {
-        status,
-        response,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
       },
     })
 
-    // If accepted, create player
-    if (status === "ACCEPTED") {
-      await prisma.player.create({
-        data: {
-          name: joinRequest.user.name || "",
-          userId: joinRequest.user.id,
-          leagueId: params.id,
-        },
-      })
+    if (!existingRequest || existingRequest.status !== "PENDING") {
+      return new NextResponse("Join request already processed", { status: 400 })
     }
 
-    return NextResponse.json(joinRequest)
+    // Use transaction to ensure data consistency
+    const result = await prisma.$transaction(async (tx) => {
+      // Update join request
+      const joinRequest = await tx.joinRequest.update({
+        where: {
+          id: params.requestId,
+          leagueId: params.id,
+          status: "PENDING", // Only update if still pending
+        },
+        data: {
+          status,
+          response,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      })
+
+      // If accepted, create player
+      if (status === "ACCEPTED") {
+        // Check if player already exists
+        const existingPlayer = await tx.player.findFirst({
+          where: {
+            userId: joinRequest.user.id,
+            leagueId: params.id,
+          },
+        })
+
+        if (!existingPlayer) {
+          await tx.player.create({
+            data: {
+              name: joinRequest.user.name || "",
+              userId: joinRequest.user.id,
+              leagueId: params.id,
+            },
+          })
+        }
+      }
+
+      return joinRequest
+    })
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[LEAGUE_JOIN_PATCH]", error)
     return new NextResponse("Internal Error", { status: 500 })
