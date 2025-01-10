@@ -5,12 +5,30 @@ import { prisma } from "@/lib/prisma"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
+  debug: process.env.NODE_ENV === 'development',
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     }),
   ],
+  secret: process.env.NEXTAUTH_SECRET,
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
+  },
+  cookies: {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production'
+      }
+    }
+  },
   callbacks: {
     async signIn({ user, account, profile }) {
       if (!user.email) return false
@@ -62,21 +80,18 @@ export const authOptions: NextAuthOptions = {
               id_token: account?.id_token,
             },
           })
-          return true
         }
 
-        // Allow sign in if the account is already linked
         return true
       } catch (error) {
         console.error("Error in signIn callback:", error)
         return false
       }
     },
-    async jwt({ token, user }) {
-      if (user) {
-        // Get user from database
+    async jwt({ token, user, account }) {
+      if (user?.email) {
         const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
+          where: { email: user.email },
           select: {
             id: true,
             role: true,
@@ -98,18 +113,21 @@ export const authOptions: NextAuthOptions = {
       return session
     },
     async redirect({ url, baseUrl }) {
-      if (url.startsWith(baseUrl)) return url
-      if (url.startsWith('/')) return `${baseUrl}${url}`
-      return baseUrl
+      // Always redirect to dashboard after sign in
+      if (url.includes('signin') || url === baseUrl) {
+        return `${baseUrl}/dashboard`
+      }
+      
+      // Handle other redirects
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`
+      }
+      return url
     }
   },
   pages: {
     signIn: "/auth/signin",
     error: "/auth/error",
     signOut: "/"
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60 // 30 days
   }
 } 

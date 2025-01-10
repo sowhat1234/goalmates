@@ -12,24 +12,36 @@ function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl')
+  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
 
-  const handleGoogleSignIn = () => {
-    setIsLoading(true)
-    signIn("google", {
-      callbackUrl: callbackUrl || "/",
-      redirect: true,
-    })
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true)
+      await signIn("google", {
+        callbackUrl: callbackUrl,
+        redirect: true,
+      })
+    } catch (error) {
+      console.error('Sign in error:', error)
+      setError('Failed to sign in')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // If we're already on the sign-in page with a callbackUrl that's /auth/signin,
-  // redirect to home to prevent loops
+  // use dashboard as default
   if (callbackUrl?.includes('/auth/signin')) {
-    signIn("google", {
-      callbackUrl: "/",
-      redirect: true,
-    })
-    return null
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <PublicHeader />
+        <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
+            <p>Redirecting to dashboard...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
