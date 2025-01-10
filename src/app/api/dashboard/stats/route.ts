@@ -10,9 +10,12 @@ export async function GET() {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    // Get user's leagues with counts (both owned and joined)
+    console.log("[DASHBOARD_STATS] User role:", session.user.role)
+    const isAdmin = session.user.role === 'ADMIN'
+
+    // For admin users, get all leagues. For regular users, get only their leagues
     const leagues = await prisma.league.findMany({
-      where: {
+      where: isAdmin ? undefined : {
         OR: [
           {
             ownerId: session.user.id // Leagues owned by the user
@@ -49,6 +52,8 @@ export async function GET() {
       }
     })
 
+    console.log("[DASHBOARD_STATS] Found leagues:", leagues.length)
+
     // Calculate totals
     const totalLeagues = leagues.length
     const totalPlayers = leagues.reduce((acc, league) => acc + league._count.players, 0)
@@ -66,13 +71,16 @@ export async function GET() {
       )
     )
 
-    return NextResponse.json({
+    const stats = {
       totalLeagues,
       totalPlayers,
       totalMatches: userMatches.length,
       recentMatches: userMatches.slice(0, 5),
       upcomingFixtures: [] // We'll implement this when we add fixture scheduling
-    })
+    }
+
+    console.log("[DASHBOARD_STATS] Returning stats:", stats)
+    return NextResponse.json(stats)
   } catch (error) {
     console.error("[DASHBOARD_STATS]", error)
     return new NextResponse("Internal Error", { status: 500 })

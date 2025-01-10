@@ -90,7 +90,7 @@ export default function DashboardPage() {
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">My Leagues</dt>
+                  <dt className="text-sm font-medium text-gray-500 truncate">{isAdmin ? 'Leagues' : 'My Leagues'}</dt>
                   <dd className="text-lg font-semibold text-gray-900">{stats.totalLeagues}</dd>
                 </dl>
               </div>
@@ -99,7 +99,7 @@ export default function DashboardPage() {
           <div className="bg-gray-50 px-5 py-3">
             <div className="text-sm">
               <Link href="/dashboard/leagues" className="font-medium text-blue-700 hover:text-blue-900">
-                View my leagues
+                {isAdmin ? 'View leagues' : 'View my leagues'}
               </Link>
             </div>
           </div>

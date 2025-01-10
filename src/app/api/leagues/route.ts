@@ -48,8 +48,10 @@ export async function GET() {
 
     console.log("[LEAGUES_GET] Fetching leagues for user:", session.user.id)
 
+    // If user is admin, show all leagues
+    const isAdmin = session.user.role === 'ADMIN'
     const leagues = await prisma.league.findMany({
-      where: {
+      where: isAdmin ? undefined : {
         OR: [
           { ownerId: session.user.id },
           {

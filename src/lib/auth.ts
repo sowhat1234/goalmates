@@ -88,10 +88,11 @@ export const authOptions: NextAuthOptions = {
         return false
       }
     },
-    async jwt({ token, user, account }) {
-      if (user?.email) {
+    async jwt({ token, user, account, trigger, session }) {
+      // Always fetch fresh user data on token creation/update
+      if (user?.email || trigger === "update") {
         const dbUser = await prisma.user.findUnique({
-          where: { email: user.email },
+          where: { email: user?.email || token.email },
           select: {
             id: true,
             role: true,
@@ -103,6 +104,7 @@ export const authOptions: NextAuthOptions = {
           token.role = dbUser.role
         }
       }
+
       return token
     },
     async session({ session, token }) {
@@ -110,6 +112,13 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string
         session.user.role = token.role as 'USER' | 'LEAGUE_MANAGER' | 'ADMIN'
       }
+
+      // Debug session creation
+      console.log('Creating session with data:', {
+        id: session.user?.id,
+        role: session.user?.role
+      })
+
       return session
     },
     async redirect({ url, baseUrl }) {
