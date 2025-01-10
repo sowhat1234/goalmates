@@ -7,7 +7,7 @@ async function updateUserRole() {
   const role = process.argv[3] as UserRole
 
   if (!email || !['USER', 'LEAGUE_MANAGER', 'ADMIN'].includes(role)) {
-    console.error('Usage: npx ts-node scripts/update-user-role.ts <email> <role>')
+    console.error('Usage: npx tsx scripts/update-user-role.ts <email> <role>')
     console.error('Role must be one of: USER, LEAGUE_MANAGER, ADMIN')
     process.exit(1)
   }

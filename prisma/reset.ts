@@ -7,6 +7,9 @@ async function resetDatabase() {
     // Delete in correct order to respect relationships
     console.log('🗑️ Deleting player teams...')
     await prisma.playerTeam.deleteMany()
+
+    console.log('🗑️ Deleting teams...')
+    await prisma.team.deleteMany()
     
     console.log('🗑️ Deleting players...')
     await prisma.player.deleteMany()
