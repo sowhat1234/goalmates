@@ -7,10 +7,11 @@ import { useState, useRef, useEffect } from 'react'
 import { UserCircle } from 'lucide-react'
 
 export function PublicHeader() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const pathname = usePathname()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const isLoading = status === "loading"
 
   // Don't show the public header in dashboard routes
   if (pathname?.startsWith('/dashboard')) {
@@ -53,7 +54,9 @@ export function PublicHeader() {
             >
               About
             </Link>
-            {session ? (
+            {isLoading ? (
+              <div className="h-10 w-20 bg-gray-200 rounded-md animate-pulse" />
+            ) : session ? (
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}

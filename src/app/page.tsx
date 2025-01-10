@@ -4,6 +4,9 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { PublicHeader } from "@/components/public-header"
 import { Trophy, Users, BarChart3, Activity, ArrowRight } from 'lucide-react'
+import { useEffect } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { pageview } from '@/lib/analytics'
 
 const features = [
   {
@@ -38,6 +41,19 @@ const stats = [
   { name: "Matches Tracked", value: "25k+" },
   { name: "Teams", value: "1,000+" }
 ]
+
+export function Analytics() {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (pathname) {
+      pageview(pathname + searchParams.toString())
+    }
+  }, [pathname, searchParams])
+
+  return null
+}
 
 export default function HomePage() {
   const { data: session, status } = useSession()
