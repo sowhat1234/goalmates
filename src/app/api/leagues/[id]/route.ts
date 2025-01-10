@@ -19,34 +19,45 @@ export async function GET(
     const params = await props.params
     const { id } = params
 
-    const league = await prisma.league.findFirst({
-      where: {
-        id: id,
-        ownerId: session.user.id,
-      },
+    // Check if the user is the league owner, a player, or an admin
+    const league = await prisma.league.findUnique({
+      where: { id },
       include: {
+        players: {
+          where: {
+            userId: session.user.id
+          }
+        },
         seasons: {
           orderBy: {
-            startDate: "desc",
+            startDate: "desc"
           },
           select: {
             id: true,
             name: true,
             startDate: true,
-            endDate: true,
-          },
+            endDate: true
+          }
         },
-        players: {
+        _count: {
           select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+            players: true,
+            seasons: true
+          }
+        }
+      }
     })
 
     if (!league) {
       return new NextResponse("Not Found", { status: 404 })
+    }
+
+    const isOwner = league.ownerId === session.user.id
+    const isPlayer = league.players.length > 0
+    const isAdmin = session.user.role === "ADMIN"
+
+    if (!isOwner && !isPlayer && !isAdmin) {
+      return new NextResponse("Unauthorized", { status: 401 })
     }
 
     return NextResponse.json(league)
@@ -74,8 +85,8 @@ export async function PATCH(
     const league = await prisma.league.findFirst({
       where: {
         id: id,
-        ownerId: session.user.id,
-      },
+        ownerId: session.user.id
+      }
     })
 
     if (!league) {
@@ -84,12 +95,12 @@ export async function PATCH(
 
     const updatedLeague = await prisma.league.update({
       where: {
-        id: id,
+        id: id
       },
       data: {
         name: json.name,
-        description: json.description,
-      },
+        description: json.description
+      }
     })
 
     return NextResponse.json(updatedLeague)
@@ -116,8 +127,8 @@ export async function DELETE(
     const league = await prisma.league.findFirst({
       where: {
         id: id,
-        ownerId: session.user.id,
-      },
+        ownerId: session.user.id
+      }
     })
 
     if (!league) {
@@ -126,8 +137,8 @@ export async function DELETE(
 
     await prisma.league.delete({
       where: {
-        id: id,
-      },
+        id: id
+      }
     })
 
     return new NextResponse(null, { status: 204 })

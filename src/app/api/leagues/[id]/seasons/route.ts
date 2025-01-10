@@ -1,5 +1,5 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -11,20 +11,41 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions)
-
-    if (!session?.user?.id) {
+    if (!session?.user) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
     const params = await props.params
     const { id } = params
 
+    // Check if the user is a player in the league, owner, or an admin
+    const league = await prisma.league.findUnique({
+      where: { id },
+      include: {
+        players: {
+          where: {
+            userId: session.user.id,
+          },
+        },
+      },
+    })
+
+    if (!league) {
+      return new NextResponse("League not found", { status: 404 })
+    }
+
+    const isOwner = league.ownerId === session.user.id
+    const isPlayer = league.players.length > 0
+    const isAdmin = session.user.role === "ADMIN"
+
+    if (!isOwner && !isPlayer && !isAdmin) {
+      return new NextResponse("Unauthorized", { status: 401 })
+    }
+
+    // Fetch seasons for the league
     const seasons = await prisma.season.findMany({
       where: {
         leagueId: id,
-        league: {
-          ownerId: session.user.id,
-        },
       },
       orderBy: {
         startDate: "desc",
@@ -33,8 +54,8 @@ export async function GET(
 
     return NextResponse.json(seasons)
   } catch (error) {
-    console.error("[SEASONS_GET]", error)
-    return new NextResponse("Internal Error", { status: 500 })
+    console.error("Error fetching seasons:", error)
+    return new NextResponse("Internal Server Error", { status: 500 })
   }
 }
 

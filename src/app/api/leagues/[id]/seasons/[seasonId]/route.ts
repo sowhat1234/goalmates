@@ -22,18 +22,39 @@ export async function GET(
     const params = await props.params
     const { id, seasonId } = params
 
+    // Check if the user is a player in the league, owner, or an admin
+    const league = await prisma.league.findUnique({
+      where: { id },
+      include: {
+        players: {
+          where: {
+            userId: session.user.id
+          }
+        }
+      }
+    })
+
+    if (!league) {
+      return new NextResponse("League not found", { status: 404 })
+    }
+
+    const isOwner = league.ownerId === session.user.id
+    const isPlayer = league.players.length > 0
+    const isAdmin = session.user.role === "ADMIN"
+
+    if (!isOwner && !isPlayer && !isAdmin) {
+      return new NextResponse("Unauthorized", { status: 401 })
+    }
+
     const season = await prisma.season.findFirst({
       where: {
         id: seasonId,
-        leagueId: id,
-        league: {
-          ownerId: session.user.id,
-        },
+        leagueId: id
       },
       include: {
         fixtures: {
           orderBy: {
-            date: "desc",
+            date: "desc"
           },
           select: {
             id: true,
@@ -44,30 +65,30 @@ export async function GET(
                 homeTeam: {
                   select: {
                     id: true,
-                    name: true,
-                  },
+                    name: true
+                  }
                 },
                 awayTeam: {
                   select: {
                     id: true,
-                    name: true,
-                  },
+                    name: true
+                  }
                 },
                 events: {
                   include: {
                     player: {
                       select: {
                         id: true,
-                        name: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+                        name: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     })
 
     if (!season) {
@@ -100,9 +121,9 @@ export async function PATCH(
         id: seasonId,
         leagueId: id,
         league: {
-          ownerId: session.user.id,
-        },
-      },
+          ownerId: session.user.id
+        }
+      }
     })
 
     if (!season) {
@@ -113,14 +134,14 @@ export async function PATCH(
 
     const updatedSeason = await prisma.season.update({
       where: {
-        id: seasonId,
+        id: seasonId
       },
       data: {
         name: json.name,
         startDate: json.startDate ? new Date(json.startDate) : undefined,
         endDate: json.endDate ? new Date(json.endDate) : undefined,
-        rules: json.rules,
-      },
+        rules: json.rules
+      }
     })
 
     return NextResponse.json(updatedSeason)
@@ -149,9 +170,9 @@ export async function DELETE(
         id: seasonId,
         leagueId: id,
         league: {
-          ownerId: session.user.id,
-        },
-      },
+          ownerId: session.user.id
+        }
+      }
     })
 
     if (!season) {
@@ -160,8 +181,8 @@ export async function DELETE(
 
     await prisma.season.delete({
       where: {
-        id: seasonId,
-      },
+        id: seasonId
+      }
     })
 
     return new NextResponse(null, { status: 204 })

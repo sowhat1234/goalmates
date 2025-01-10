@@ -3,80 +3,30 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return new NextResponse("Unauthorized", { status: 401 })
-    }
-
-    // Verify league ownership
-    const league = await prisma.league.findUnique({
-      where: {
-        id: params.id,
-        ownerId: session.user.id,
-      },
-    })
-
-    if (!league) {
-      return new NextResponse("League not found", { status: 404 })
-    }
-
-    const json = await request.json()
-    const { players } = json
-
-    if (!Array.isArray(players) || players.length === 0) {
-      return new NextResponse("Invalid players data", { status: 400 })
-    }
-
-    // Validate each player
-    for (const player of players) {
-      if (!player.name || typeof player.name !== "string" || player.name.length < 1) {
-        return new NextResponse("Invalid player name", { status: 400 })
-      }
-      if (!player.email || typeof player.email !== "string" || !player.email.includes("@")) {
-        return new NextResponse("Invalid player email", { status: 400 })
-      }
-    }
-
-    // Create all players in a transaction
-    const createdPlayers = await prisma.$transaction(
-      players.map((player) =>
-        prisma.player.create({
-          data: {
-            name: player.name,
-            userId: session.user.id,
-            leagueId: params.id,
-          },
-        })
-      )
-    )
-
-    return NextResponse.json(createdPlayers)
-  } catch (error) {
-    console.error("[LEAGUE_PLAYERS_POST]", error)
-    return new NextResponse("Internal Error", { status: 500 })
-  }
-}
+type RouteParams = Promise<{ id: string }>
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  props: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    if (!session?.user) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    // Verify league ownership
+    const params = await props.params
+    const { id } = params
+
+    // Check if the user is a player in the league or an admin
     const league = await prisma.league.findUnique({
-      where: {
-        id: params.id,
-        ownerId: session.user.id,
+      where: { id },
+      include: {
+        players: {
+          where: {
+            userId: session.user.id,
+          },
+        },
       },
     })
 
@@ -84,18 +34,96 @@ export async function GET(
       return new NextResponse("League not found", { status: 404 })
     }
 
+    if (league.players.length === 0 && session.user.role !== "ADMIN") {
+      return new NextResponse("Unauthorized", { status: 401 })
+    }
+
+    // Fetch players for the league with their stats
     const players = await prisma.player.findMany({
       where: {
-        leagueId: params.id,
+        leagueId: id,
       },
-      orderBy: {
-        name: "asc",
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+        events: {
+          select: {
+            type: true,
+          },
+        },
       },
     })
 
-    return NextResponse.json(players)
+    // Transform the data to include calculated stats
+    const transformedPlayers = players.map(player => ({
+      id: player.id,
+      name: player.name,
+      user: player.user,
+      matches: new Set(player.events.map(e => e.type === "MATCH")).size,
+      goals: player.events.filter(e => e.type === "GOAL").length,
+      assists: player.events.filter(e => e.type === "ASSIST").length,
+    }))
+
+    return NextResponse.json(transformedPlayers)
   } catch (error) {
-    console.error("[LEAGUE_PLAYERS_GET]", error)
+    console.error("Error fetching players:", error)
+    return new NextResponse("Internal Server Error", { status: 500 })
+  }
+}
+
+export async function POST(
+  request: Request,
+  props: { params: RouteParams }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return new NextResponse("Unauthorized", { status: 401 })
+    }
+
+    const params = await props.params
+    const { id } = params
+
+    // Check if the user is the league owner or an admin
+    const league = await prisma.league.findFirst({
+      where: {
+        id,
+        OR: [
+          { ownerId: session.user.id },
+          { players: { some: { userId: session.user.id } } },
+        ],
+      },
+    })
+
+    if (!league) {
+      return new NextResponse("Not Found", { status: 404 })
+    }
+
+    const json = await request.json()
+
+    const player = await prisma.player.create({
+      data: {
+        name: json.name,
+        userId: json.userId,
+        leagueId: id,
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+    })
+
+    return NextResponse.json(player)
+  } catch (error) {
+    console.error("[PLAYERS_POST]", error)
     return new NextResponse("Internal Error", { status: 500 })
   }
 } 

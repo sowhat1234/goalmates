@@ -1,68 +1,80 @@
-import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.id) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    // Get active leagues count
-    const activeLeagues = await prisma.league.count({
+    // Get user's leagues with counts (both owned and joined)
+    const leagues = await prisma.league.findMany({
       where: {
-        ownerId: session.user.id,
-      },
-    })
-
-    // Get total players count across all leagues
-    const totalPlayers = await prisma.player.count({
-      where: {
-        league: {
-          ownerId: session.user.id,
-        },
-      },
-    })
-
-    // Get upcoming fixtures count
-    const upcomingFixtures = await prisma.fixture.count({
-      where: {
-        season: {
-          league: {
-            ownerId: session.user.id,
+        OR: [
+          {
+            ownerId: session.user.id // Leagues owned by the user
           },
-        },
-        date: {
-          gte: new Date(),
-        },
-        status: "WAITING_TO_START",
+          {
+            players: {
+              some: {
+                userId: session.user.id // Leagues where user is a player
+              }
+            }
+          }
+        ]
       },
+      include: {
+        _count: {
+          select: {
+            players: true,
+            seasons: true
+          }
+        },
+        players: {
+          where: {
+            userId: session.user.id
+          },
+          include: {
+            events: {
+              take: 5,
+              orderBy: {
+                createdAt: 'desc'
+              }
+            }
+          }
+        }
+      }
     })
 
-    // Get total matches count
-    const totalMatches = await prisma.match.count({
-      where: {
-        fixture: {
-          season: {
-            league: {
-              ownerId: session.user.id,
-            },
-          },
-        },
-      },
-    })
+    // Calculate totals
+    const totalLeagues = leagues.length
+    const totalPlayers = leagues.reduce((acc, league) => acc + league._count.players, 0)
+
+    // Get user's matches through their player records
+    const userMatches = leagues.flatMap(league => 
+      league.players.flatMap(player => 
+        player.events.map(event => ({
+          id: event.id,
+          date: event.timestamp,
+          leagueName: league.name,
+          seasonName: 'Current Season', // We can update this when we implement seasons
+          result: event.type // This will show the event type (GOAL, ASSIST, etc.)
+        }))
+      )
+    )
 
     return NextResponse.json({
-      activeLeagues,
+      totalLeagues,
       totalPlayers,
-      upcomingFixtures,
-      totalMatches,
+      totalMatches: userMatches.length,
+      recentMatches: userMatches.slice(0, 5),
+      upcomingFixtures: [] // We'll implement this when we add fixture scheduling
     })
   } catch (error) {
-    console.error("[DASHBOARD_STATS_GET]", error)
+    console.error("[DASHBOARD_STATS]", error)
     return new NextResponse("Internal Error", { status: 500 })
   }
 }

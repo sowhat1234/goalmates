@@ -7,16 +7,27 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  USER
+  LEAGUE_MANAGER
+  ADMIN
+}
+
 model User {
   id            String    @id @default(cuid()) @map("_id")
   name          String?
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  hashedPassword String?  // Optional because users can sign in with Google
+  role          UserRole  @default(USER)
   accounts      Account[]
   sessions      Session[]
   leagues       League[]  @relation("LeagueOwner")
   players       Player[]
+  joinRequests  JoinRequest[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Account {
@@ -50,10 +61,12 @@ model League {
   id          String    @id @default(cuid()) @map("_id")
   name        String
   description String?
+  isPrivate   Boolean   @default(false)  // If true, league won't show up in public listings
   ownerId     String
   owner       User      @relation("LeagueOwner", fields: [ownerId], references: [id])
   seasons     Season[]
   players     Player[]
+  joinRequests JoinRequest[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -150,4 +163,17 @@ model PlayerTeam {
   updatedAt DateTime @updatedAt
 
   @@unique([playerId, teamId])
+}
+
+model JoinRequest {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  leagueId  String
+  league    League   @relation(fields: [leagueId], references: [id])
+  status    String   @default("PENDING")  // PENDING, ACCEPTED, REJECTED
+  message   String?  // Optional message from the user requesting to join
+  response  String?  // Optional response message from league owner
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
