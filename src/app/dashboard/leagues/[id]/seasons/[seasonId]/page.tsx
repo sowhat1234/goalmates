@@ -1,50 +1,31 @@
 "use client"
 
-import { useParams } from "next/navigation"
+import { useState } from "react"
 import Link from "next/link"
+import { useParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import useSWR from "swr"
-import { useState } from "react"
+import { fetcher } from "@/lib/utils"
 
-type Season = {
+interface Season {
   id: string
   name: string
   startDate: string
   endDate: string
-  pointsSystem: {
-    win: number
-    draw: number
-    loss: number
+  rules: {
+    pointsForWin: number
+    pointsForDraw: number
+    pointsForLoss: number
   }
-  teamSize: number
-  teamsPerMatch: number
   fixtures: Array<{
     id: string
     date: string
-    status: string
+    status: 'WAITING_TO_START' | 'IN_PROGRESS' | 'COMPLETED'
+    matches: Array<{
+      homeTeam: { name: string }
+      awayTeam: { name: string }
+    }>
   }>
-  matches: Array<{
-    id: string
-    date: string
-    status: string
-  }>
-}
-
-const defaultPointsSystem = {
-  win: 3,
-  draw: 1,
-  loss: 0
-}
-
-// Fetch function for SWR
-const fetcher = async (url: string) => {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('Failed to fetch season')
-  const data = await res.json()
-  return {
-    ...data,
-    pointsSystem: data.pointsSystem || defaultPointsSystem
-  }
 }
 
 export default function SeasonPage() {
@@ -58,9 +39,9 @@ export default function SeasonPage() {
     params.id && params.seasonId ? `/api/leagues/${params.id}/seasons/${params.seasonId}` : null,
     fetcher,
     {
-      revalidateOnFocus: false, // Don't refetch when window regains focus
-      revalidateOnReconnect: false, // Don't refetch when browser regains connection
-      dedupingInterval: 60000, // Cache data for 1 minute
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 60000,
     }
   )
 
@@ -138,19 +119,7 @@ export default function SeasonPage() {
               <div>
                 <dt className="text-sm font-medium text-gray-500">Points System</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  Win: {season.pointsSystem.win} / Draw: {season.pointsSystem.draw} / Loss: {season.pointsSystem.loss}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Team Size</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {season.teamSize} players {season.teamsPerMatch > 2 && "(Asymmetric teams allowed)"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Teams per Match</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  Maximum {season.teamsPerMatch} teams
+                  Win: {season.rules.pointsForWin} / Draw: {season.rules.pointsForDraw} / Loss: {season.rules.pointsForLoss}
                 </dd>
               </div>
             </dl>
@@ -165,37 +134,95 @@ export default function SeasonPage() {
                   {season.fixtures?.length || 0}
                 </dd>
               </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Total Matches</dt>
-                <dd className="mt-1 text-2xl font-semibold text-gray-900">
-                  {season.matches?.length || 0}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">WOW Moments</dt>
-                <dd className="mt-1 text-2xl font-semibold text-gray-900">0</dd>
-              </div>
             </dl>
           </div>
         </div>
       )}
 
-      {canManageSeason && (
-        <div className="bg-white shadow rounded-lg p-6 mt-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Danger Zone</h3>
-          <p className="text-sm text-red-600 mb-4">
-            Once you delete a season, there is no going back. Please be certain.
-          </p>
-          <button
-            onClick={() => {
-              if (window.confirm("Are you sure you want to delete this season? This action cannot be undone.")) {
-                // Add delete functionality
-              }
-            }}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-          >
-            Delete Season
-          </button>
+      {activeTab === "fixtures" && (
+        <div className="bg-white shadow rounded-lg">
+          {season.fixtures?.length === 0 ? (
+            <div className="text-center py-12">
+              <h3 className="text-lg font-medium text-gray-900">No Fixtures</h3>
+              <p className="mt-2 text-sm text-gray-500">Get started by creating your first fixture.</p>
+              {canManageSeason && (
+                <div className="mt-6">
+                  <Link
+                    href={`/dashboard/leagues/${params.id}/seasons/${season.id}/fixtures/new`}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Create Fixture
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Teams
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="relative px-6 py-3">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {season.fixtures.map((fixture) => (
+                    <tr key={fixture.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(fixture.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {fixture.matches[0]?.homeTeam.name} vs {fixture.matches[0]?.awayTeam.name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          fixture.status === 'COMPLETED'
+                            ? 'bg-green-100 text-green-800'
+                            : fixture.status === 'IN_PROGRESS'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {fixture.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <Link
+                          href={`/dashboard/leagues/${params.id}/seasons/${season.id}/fixtures/${fixture.id}`}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "standings" && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900">Standings</h3>
+          <p className="mt-2 text-sm text-gray-500">Coming soon...</p>
+        </div>
+      )}
+
+      {activeTab === "stats" && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900">Statistics</h3>
+          <p className="mt-2 text-sm text-gray-500">Coming soon...</p>
         </div>
       )}
     </div>

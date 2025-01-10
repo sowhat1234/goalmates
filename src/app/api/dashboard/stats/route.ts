@@ -48,6 +48,21 @@ export async function GET() {
               }
             }
           }
+        },
+        seasons: {
+          include: {
+            fixtures: {
+              where: {
+                date: {
+                  gte: new Date()
+                }
+              },
+              orderBy: {
+                date: 'asc'
+              },
+              take: 5
+            }
+          }
         }
       }
     })
@@ -71,12 +86,24 @@ export async function GET() {
       )
     )
 
+    // Get upcoming fixtures
+    const upcomingFixtures = leagues.flatMap(league =>
+      league.seasons.flatMap(season =>
+        season.fixtures.map(fixture => ({
+          id: fixture.id,
+          date: fixture.date,
+          leagueName: league.name,
+          seasonName: season.name
+        }))
+      )
+    )
+
     const stats = {
       totalLeagues,
       totalPlayers,
       totalMatches: userMatches.length,
       recentMatches: userMatches.slice(0, 5),
-      upcomingFixtures: [] // We'll implement this when we add fixture scheduling
+      upcomingFixtures: upcomingFixtures.slice(0, 5)
     }
 
     console.log("[DASHBOARD_STATS] Returning stats:", stats)

@@ -42,15 +42,36 @@ export async function GET(
     const params = await props.params
     const { id, seasonId } = params
 
-    // Verify league ownership and get fixtures
+    // Check if the user has access to the league
+    const league = await prisma.league.findUnique({
+      where: { id },
+      include: {
+        players: {
+          where: {
+            userId: session.user.id
+          }
+        }
+      }
+    })
+
+    if (!league) {
+      return new NextResponse("League not found", { status: 404 })
+    }
+
+    const isOwner = league.ownerId === session.user.id
+    const isPlayer = league.players.length > 0
+    const isAdmin = session.user.role === "ADMIN"
+
+    if (!isOwner && !isPlayer && !isAdmin) {
+      return new NextResponse("Unauthorized", { status: 401 })
+    }
+
+    // Get fixtures for the season
     const fixtures = await prisma.fixture.findMany({
       where: {
         seasonId,
         season: {
-          leagueId: id,
-          league: {
-            ownerId: session.user.id
-          }
+          leagueId: id
         }
       },
       include: {
@@ -93,23 +114,31 @@ export async function POST(
     const params = await props.params
     const { id, seasonId } = params
 
-    // Verify league ownership
+    // Verify league ownership or admin status
     const league = await prisma.league.findFirst({
       where: {
         id: id,
-        ownerId: session.user.id,
-      },
-      include: {
-        seasons: {
-          where: {
-            id: seasonId,
-          },
-        },
-      },
+        OR: [
+          { ownerId: session.user.id },
+          { players: { some: { userId: session.user.id } } }
+        ]
+      }
     })
 
-    if (!league || league.seasons.length === 0) {
+    if (!league) {
       return new NextResponse("Not Found", { status: 404 })
+    }
+
+    // Check if season exists
+    const season = await prisma.season.findFirst({
+      where: {
+        id: seasonId,
+        leagueId: id
+      }
+    })
+
+    if (!season) {
+      return new NextResponse("Season not found", { status: 404 })
     }
 
     const json = await request.json()
@@ -161,44 +190,16 @@ export async function POST(
       include: {
         matches: {
           include: {
-            homeTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true,
-                  },
-                },
-              },
-            },
-            awayTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true,
-                  },
-                },
-              },
-            },
-            waitingTeam: {
-              include: {
-                players: {
-                  include: {
-                    player: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+            homeTeam: true,
+            awayTeam: true,
+            waitingTeam: true
+          }
+        }
+      }
     })
 
     return NextResponse.json(fixture)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return new NextResponse("Invalid request data", { status: 400 })
-    }
-
     console.error("[FIXTURES_POST]", error)
     return new NextResponse("Internal Error", { status: 500 })
   }
