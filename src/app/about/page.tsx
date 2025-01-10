@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { FaTrophy, FaUsers, FaChartLine, FaFutbol } from 'react-icons/fa'
+import { PublicHeader } from '@/components/public-header'
 
-export default function About() {
+export default function AboutPage() {
   return (
     <div className="min-h-screen bg-white">
+      <PublicHeader />
       {/* Hero Section */}
       <div className="relative isolate px-6 pt-14 lg:px-8">
         <div className="mx-auto max-w-4xl py-16">

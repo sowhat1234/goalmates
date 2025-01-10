@@ -16,7 +16,9 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const isAdmin = session?.user?.role === 'ADMIN'
   const isLeagueManager = session?.user?.role === 'LEAGUE_MANAGER'
@@ -33,13 +35,20 @@ export default function DashboardLayout({
       ) {
         setIsMobileMenuOpen(false)
       }
+      if (
+        isUserMenuOpen &&
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsUserMenuOpen(false)
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isMobileMenuOpen])
+  }, [isMobileMenuOpen, isUserMenuOpen])
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard' },
@@ -71,6 +80,8 @@ export default function DashboardLayout({
     router.push(href)
   }
 
+  const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'User'
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow">
@@ -78,7 +89,7 @@ export default function DashboardLayout({
           <div className="flex h-16 justify-between">
             <div className="flex">
               <div className="flex flex-shrink-0 items-center">
-                <Link href="/dashboard" className="text-xl font-bold text-blue-600">
+                <Link href="/" className="text-xl font-bold text-blue-600">
                   {isAdmin ? 'GoalMates Admin' : isLeagueManager ? 'GoalMates Manager' : 'GoalMates'}
                 </Link>
               </div>
@@ -102,19 +113,32 @@ export default function DashboardLayout({
               </div>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:items-center">
-              <div className="relative ml-3">
-                <div className="flex items-center">
-                  <button
-                    onClick={handleSignOut}
-                    className="flex items-center text-sm font-medium text-gray-500 hover:text-gray-700"
-                  >
-                    <UserCircle className="h-8 w-8 text-gray-400" aria-hidden="true" />
-                    <div className="ml-3">
-                      <p className="text-sm font-medium text-gray-700">{session?.user?.email}</p>
-                      <p className="text-xs text-gray-500">{session?.user?.role?.toLowerCase()}</p>
+              <div className="relative ml-3" ref={userMenuRef}>
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center text-sm font-medium text-gray-500 hover:text-gray-700"
+                >
+                  <UserCircle className="h-8 w-8 text-gray-400" aria-hidden="true" />
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-700">{userName}</p>
+                    <p className="text-xs text-gray-500">{session?.user?.role?.toLowerCase()}</p>
+                  </div>
+                </button>
+
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 py-1 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                    <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
+                      Signed in as<br />
+                      <span className="font-medium text-gray-900">{session?.user?.email}</span>
                     </div>
-                  </button>
-                </div>
+                    <button
+                      onClick={handleSignOut}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center sm:hidden">
@@ -163,7 +187,7 @@ export default function DashboardLayout({
                 <UserCircle className="h-8 w-8 text-gray-400" aria-hidden="true" />
               </div>
               <div className="ml-3">
-                <div className="text-sm font-medium text-gray-700">{session?.user?.email}</div>
+                <div className="text-sm font-medium text-gray-700">{userName}</div>
                 <div className="text-xs text-gray-500">{session?.user?.role?.toLowerCase()}</div>
               </div>
             </div>

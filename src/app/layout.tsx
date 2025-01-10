@@ -1,14 +1,13 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { NextAuthProvider } from "@/providers/auth";
+import { Inter } from 'next/font/google'
+import { NextAuthProvider } from '@/providers/auth'
+import './globals.css'
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] })
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "GoalMates - Sports League Management",
   description: "Manage your sports leagues, track statistics, and record memorable moments.",
-};
+}
 
 export default function RootLayout({
   children,
@@ -23,5 +22,5 @@ export default function RootLayout({
         </NextAuthProvider>
       </body>
     </html>
-  );
+  )
 }
