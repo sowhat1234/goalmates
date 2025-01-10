@@ -59,6 +59,17 @@ export default function HomePage() {
   const { data: session, status } = useSession()
   const isLoading = status === "loading"
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <PublicHeader />
+        <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <PublicHeader />

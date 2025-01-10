@@ -1,8 +1,7 @@
 import { Inter } from 'next/font/google'
 import { NextAuthProvider } from '@/providers/auth'
-import Script from 'next/script'
-import { GA_TRACKING_ID } from '@/lib/analytics'
 import './globals.css'
+import { GoogleAnalytics } from '@/components/GoogleAnalytics'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,22 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <Script
-          strategy="afterInteractive"
-          src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
-        />
-        <Script
-          id="google-analytics"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
-            `,
-          }}
-        />
+        <GoogleAnalytics />
       </head>
       <body className={inter.className}>
         <NextAuthProvider>
