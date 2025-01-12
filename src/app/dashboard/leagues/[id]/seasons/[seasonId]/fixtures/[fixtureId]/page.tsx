@@ -40,6 +40,31 @@ async function getFixtureData(id: string, seasonId: string, fixtureId: string) {
     throw new Error('Unauthorized')
   }
 
+  // First check if user has access to the league
+  const league = await prisma.league.findUnique({
+    where: { id },
+    include: {
+      players: {
+        where: {
+          userId: session.user.id
+        }
+      }
+    }
+  })
+
+  if (!league) {
+    throw new Error('League not found')
+  }
+
+  const isOwner = league.ownerId === session.user.id
+  const isPlayer = league.players.length > 0
+  const isAdmin = session.user.role === "ADMIN"
+
+  if (!isOwner && !isPlayer && !isAdmin) {
+    throw new Error('Unauthorized')
+  }
+
+  // Then fetch the fixture
   const fixture = await prisma.fixture.findFirst({
     where: {
       id: fixtureId,
@@ -47,7 +72,6 @@ async function getFixtureData(id: string, seasonId: string, fixtureId: string) {
       season: {
         league: {
           id: id,
-          ownerId: session.user.id,
         },
       },
     },
@@ -95,7 +119,7 @@ async function getFixtureData(id: string, seasonId: string, fixtureId: string) {
   })
 
   if (!fixture) {
-    notFound()
+    throw new Error('Fixture not found')
   }
 
   // Convert dates to ISO strings to match the expected type

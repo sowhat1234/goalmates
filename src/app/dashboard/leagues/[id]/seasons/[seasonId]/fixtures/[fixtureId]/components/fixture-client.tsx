@@ -640,6 +640,74 @@ export function FixtureClient({
     fetchPlayers()
   }, [id])
 
+  // Add this helper function at the top level
+  const getHighlights = (match: Match) => {
+    const highlights = []
+    
+    // Get top scorer
+    const playerGoals = new Map<string, { name: string, goals: number }>()
+    match.events
+      .filter(e => e.type === 'GOAL')
+      .forEach(e => {
+        const current = playerGoals.get(e.player.id) || { name: e.player.name, goals: 0 }
+        playerGoals.set(e.player.id, { ...current, goals: current.goals + 1 })
+      })
+    
+    const topScorer = Array.from(playerGoals.entries())
+      .sort((a, b) => b[1].goals - a[1].goals)[0]
+    
+    if (topScorer) {
+      highlights.push({
+        title: 'Top Scorer',
+        text: `${topScorer[1].name} (${topScorer[1].goals} goals)`
+      })
+    }
+
+    // Get team with most goals
+    const teamGoals = new Map<string, { name: string, goals: number }>()
+    match.events
+      .filter(e => e.type === 'GOAL')
+      .forEach(e => {
+        const team = [match.homeTeam, match.awayTeam, match.waitingTeam]
+          .find(t => t.id === e.team)
+        if (team) {
+          const current = teamGoals.get(team.id) || { name: team.name, goals: 0 }
+          teamGoals.set(team.id, { ...current, goals: current.goals + 1 })
+        }
+      })
+    
+    const topTeam = Array.from(teamGoals.entries())
+      .sort((a, b) => b[1].goals - a[1].goals)[0]
+    
+    if (topTeam) {
+      highlights.push({
+        title: 'Most Goals by Team',
+        text: `${topTeam[1].name} (${topTeam[1].goals} goals)`
+      })
+    }
+
+    // Get most saves
+    const playerSaves = new Map<string, { name: string, saves: number }>()
+    match.events
+      .filter(e => e.type === 'SAVE')
+      .forEach(e => {
+        const current = playerSaves.get(e.player.id) || { name: e.player.name, saves: 0 }
+        playerSaves.set(e.player.id, { ...current, saves: current.saves + 1 })
+      })
+    
+    const topSaver = Array.from(playerSaves.entries())
+      .sort((a, b) => b[1].saves - a[1].saves)[0]
+    
+    if (topSaver) {
+      highlights.push({
+        title: 'Best Goalkeeper',
+        text: `${topSaver[1].name} (${topSaver[1].saves} saves)`
+      })
+    }
+
+    return highlights
+  }
+
   // Return early if no match is found
   if (!currentMatch) {
     // Load team configurations from localStorage
@@ -707,27 +775,93 @@ export function FixtureClient({
 
   // If the match is finished, show the final results
   if (isCompleted) {
+    const highlights = getHighlights(currentMatch)
+    
+    // Find the winning team
+    const winningTeam = currentMatch.events.find(e => e.type === 'WIN')?.team;
+    const winner = [currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam]
+      .find(team => team.id === winningTeam);
+    
     return (
-      <div className="container mx-auto p-6 bg-white">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">
+      <div className="container mx-auto p-8 bg-white">
+        <div className="text-center mb-12">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
             Fixture Complete - {format(new Date(fixture.date), "PPP")}
           </h1>
-          <p className="mt-2 text-gray-600">This fixture has ended.</p>
+          
+          {/* Winner Display */}
+          {winner && (
+            <div className="mb-8">
+              <div className="inline-flex items-center gap-3 bg-gradient-to-r from-yellow-50 to-amber-50 px-6 py-3 rounded-full border border-yellow-200">
+                <span className="text-2xl">👑</span>
+                <span className="text-lg font-bold text-gray-900">Match Winner: {winner.name}</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Highlights Section */}
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
+              <h3 className="text-sm font-medium text-blue-600 mb-2">Top Scorer</h3>
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-2xl">⚽</span>
+                <p className="text-xl font-bold text-gray-900">{currentMatch.events.find(e => e.type === 'GOAL')?.player?.name || 'No goals scored'}</p>
+              </div>
+              <p className="mt-2 text-sm text-blue-600 font-medium">
+                {currentMatch.events.filter(e => e.type === 'GOAL' && e.player?.id === currentMatch.events.find(e => e.type === 'GOAL')?.player?.id).length || 0} goals
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 shadow-sm border border-green-100">
+              <h3 className="text-sm font-medium text-green-600 mb-2">Most Goals by Team</h3>
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-2xl">🏆</span>
+                <p className="text-xl font-bold text-gray-900">{currentMatch.homeTeam.name}</p>
+              </div>
+              <p className="mt-2 text-sm text-green-600 font-medium">
+                {currentMatch.events.filter(e => e.type === 'GOAL' && e.team === currentMatch.homeTeam.id).length || 0} goals
+              </p>
+            </div>
+          </div>
+
+          {/* Teams Display */}
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team) => (
+              <div 
+                key={team.id} 
+                className={`bg-white rounded-xl p-6 shadow-sm border ${team.id === winningTeam ? 'border-yellow-300 ring-2 ring-yellow-200' : 'border-gray-100'}`}
+              >
+                <div className="mb-3">
+                  <FaTshirt 
+                    style={{ fill: team.color }} 
+                    className="w-16 h-16 mx-auto"
+                  />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{team.name}</h3>
+                <div className="flex justify-center gap-4 text-sm text-gray-600">
+                  <span>Goals: {currentMatch.events.filter(e => e.type === 'GOAL' && e.team === team.id).length}</span>
+                  <span>Saves: {currentMatch.events.filter(e => e.type === 'SAVE' && e.team === team.id).length}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
         
         {/* Show final statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Team Statistics */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Final Statistics</h3>
+          <div className="bg-white rounded-xl shadow-md p-8 border border-gray-100">
+            <h3 className="text-xl font-semibold mb-6 text-gray-900 flex items-center gap-2">
+              <span className="text-xl">👥</span>
+              Final Team Statistics
+            </h3>
             <table className="min-w-full">
               <thead>
                 <tr>
-                  <th className="text-left text-gray-900">Team</th>
-                  <th className="text-center text-gray-900">Goals</th>
-                  <th className="text-center text-gray-900">Saves</th>
-                  <th className="text-center text-gray-900">Wins</th>
+                  <th className="text-left text-gray-600 pb-4 text-sm font-medium">Team</th>
+                  <th className="text-center text-gray-600 pb-4 text-sm font-medium">Goals</th>
+                  <th className="text-center text-gray-600 pb-4 text-sm font-medium">Saves</th>
+                  <th className="text-center text-gray-600 pb-4 text-sm font-medium">Wins</th>
                 </tr>
               </thead>
               <tbody>
@@ -746,11 +880,19 @@ export function FixtureClient({
                   ).length
 
                   return (
-                    <tr key={team.id}>
-                      <td className="text-gray-900">{team.name}</td>
-                      <td className="text-center text-gray-900">{goals}</td>
-                      <td className="text-center text-gray-900">{saves}</td>
-                      <td className="text-center text-gray-900">{wins}</td>
+                    <tr key={team.id} className="border-t border-gray-100">
+                      <td className="py-4">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-4 h-4 rounded-full" 
+                            style={{ backgroundColor: team.color }}
+                          />
+                          <span className="font-semibold text-gray-900">{team.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-center font-medium text-gray-900 py-4">{goals || 0}</td>
+                      <td className="text-center font-medium text-gray-900 py-4">{saves || 0}</td>
+                      <td className="text-center font-medium text-gray-900 py-4">{wins || 0}</td>
                     </tr>
                   )
                 })}
@@ -759,47 +901,53 @@ export function FixtureClient({
           </div>
 
           {/* Player Statistics */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Player Statistics</h3>
+          <div className="bg-white rounded-xl shadow-md p-8 border border-gray-100">
+            <h3 className="text-xl font-semibold mb-6 text-gray-900 flex items-center gap-2">
+              <span className="text-xl">👤</span>
+              Player Statistics
+            </h3>
             <table className="min-w-full">
               <thead>
                 <tr>
-                  <th className="text-left text-gray-900">Player</th>
-                  <th className="text-center text-gray-900">Goals</th>
-                  <th className="text-center text-gray-900">Assists</th>
-                  <th className="text-center text-gray-900">Saves</th>
+                  <th className="text-left text-gray-600 pb-4 text-sm font-medium">Player</th>
+                  <th className="text-center text-gray-600 pb-4 text-sm font-medium">Goals</th>
+                  <th className="text-center text-gray-600 pb-4 text-sm font-medium">Assists</th>
+                  <th className="text-center text-gray-600 pb-4 text-sm font-medium">Saves</th>
                 </tr>
               </thead>
               <tbody>
-                {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer: TeamPlayer) => {
-                  const playerEvents = currentMatch.events.filter(
-                    (event: Event) => event.playerId === teamPlayer.player.id
-                  )
-                  const goals = playerEvents.filter(
-                    (event: Event) => event.type === "GOAL"
-                  ).length
-                  const assists = playerEvents.filter(
-                    (event: Event) => event.type === "ASSIST"
-                  ).length
-                  const saves = playerEvents.filter(
-                    (event: Event) => event.type === "SAVE"
-                  ).length
+                {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players]
+                  .map((teamPlayer: TeamPlayer) => {
+                    const playerEvents = currentMatch.events.filter(
+                      (event: Event) => event.playerId === teamPlayer.player.id
+                    )
+                    const goals = playerEvents.filter(
+                      (event: Event) => event.type === "GOAL"
+                    ).length
+                    const assists = playerEvents.filter(
+                      (event: Event) => event.type === "ASSIST"
+                    ).length
+                    const saves = playerEvents.filter(
+                      (event: Event) => event.type === "SAVE"
+                    ).length
 
-                  return (
-                    <tr key={teamPlayer.player.id}>
-                      <td className="text-gray-900">{teamPlayer.player.name}</td>
-                      <td className="text-center text-gray-900">{goals}</td>
-                      <td className="text-center text-gray-900">{assists}</td>
-                      <td className="text-center text-gray-900">{saves}</td>
-                    </tr>
-                  )
-                })}
+                    return (
+                      <tr key={teamPlayer.player.id} className="border-t border-gray-100">
+                        <td className="py-4">
+                          <span className="font-semibold text-gray-900">{teamPlayer.player.name}</span>
+                        </td>
+                        <td className="text-center font-medium text-gray-900 py-4">{goals || 0}</td>
+                        <td className="text-center font-medium text-gray-900 py-4">{assists || 0}</td>
+                        <td className="text-center font-medium text-gray-900 py-4">{saves || 0}</td>
+                      </tr>
+                    )
+                  })}
               </tbody>
             </table>
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // If not waiting to start and not completed, show the in-progress match
@@ -852,17 +1000,17 @@ export function FixtureClient({
       </div>
 
       {/* Teams Display */}
-      <div className="mb-6">
-        <div className="flex items-center justify-center space-x-8">
+      <div className="mb-8">
+        <div className="flex items-center justify-center space-x-12">
           {/* Home Team */}
-          <div className="text-center w-64">
-            <div className="mb-2">
+          <div className="text-center w-80">
+            <div className="mb-4">
               <FaTshirt 
                 style={{ fill: getTeamColor(currentMatch.homeTeam).fill }} 
-                className={`w-16 h-16 mx-auto transition-colors duration-200`} 
+                className={`w-20 h-20 mx-auto transition-colors duration-200`} 
               />
             </div>
-            <h3 className={`text-xl font-bold truncate ${getTeamColor(currentMatch.homeTeam).text}`}>
+            <h3 className={`text-2xl font-bold truncate mb-4 ${getTeamColor(currentMatch.homeTeam).text}`}>
               {currentMatch.homeTeam.name}
             </h3>
             <button
@@ -875,39 +1023,44 @@ export function FixtureClient({
                 })
                 setShowEventModal(true)
               }}
-              className="mt-2 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+              className="mt-2 w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200"
             >
               Record Event
             </button>
             {/* Home Team Current Play Events */}
-            <div className="mt-4 bg-gray-50 p-3 rounded-lg max-h-40 overflow-y-auto">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Current Play Events</h4>
-              {getCurrentPlayEvents(currentMatch.events, currentMatch.homeTeam.id)
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .map(event => (
-                  <div key={event.id} className="text-sm text-gray-600 mb-1">
-                    <span className="mr-1">{EVENT_EMOJIS[event.type]}</span>
-                    <span className="font-medium">{event.player.name}</span>
-                    {' - '}
-                    {event.type.replace('_', ' ')}
-                  </div>
-                ))
-              }
+            <div className="mt-6 bg-gray-50 p-4 rounded-lg max-h-48 overflow-y-auto shadow-sm">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Current Play Events</h4>
+              {getCurrentPlayEvents(currentMatch.events, currentMatch.homeTeam.id).length > 0 ? (
+                getCurrentPlayEvents(currentMatch.events, currentMatch.homeTeam.id)
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map(event => (
+                    <div key={event.id} className="text-sm text-gray-600 mb-2 bg-white p-2 rounded-md shadow-sm">
+                      <span className="mr-2 text-lg">{EVENT_EMOJIS[event.type]}</span>
+                      <span className="font-medium">{event.player?.name || 'Unknown Player'}</span>
+                      {' - '}
+                      <span className="text-gray-500">{event.type.replace('_', ' ')}</span>
+                    </div>
+                  ))
+              ) : (
+                <div className="text-sm text-gray-500 italic py-2">
+                  No events recorded yet
+                </div>
+              )}
             </div>
           </div>
 
           {/* VS */}
-          <div className="text-2xl font-bold text-gray-600">VS</div>
+          <div className="text-3xl font-bold text-gray-400">VS</div>
 
           {/* Away Team */}
-          <div className="text-center w-64">
-            <div className="mb-2">
+          <div className="text-center w-80">
+            <div className="mb-4">
               <FaTshirt 
                 style={{ fill: getTeamColor(currentMatch.awayTeam).fill }} 
-                className={`w-16 h-16 mx-auto transition-colors duration-200`} 
+                className={`w-20 h-20 mx-auto transition-colors duration-200`} 
               />
             </div>
-            <h3 className={`text-xl font-bold truncate ${getTeamColor(currentMatch.awayTeam).text}`}>
+            <h3 className={`text-2xl font-bold truncate mb-4 ${getTeamColor(currentMatch.awayTeam).text}`}>
               {currentMatch.awayTeam.name}
             </h3>
             <button
@@ -920,60 +1073,181 @@ export function FixtureClient({
                 })
                 setShowEventModal(true)
               }}
-              className="mt-2 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+              className="mt-2 w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200"
             >
               Record Event
             </button>
             {/* Away Team Current Play Events */}
-            <div className="mt-4 bg-gray-50 p-3 rounded-lg max-h-40 overflow-y-auto">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Current Play Events</h4>
-              {getCurrentPlayEvents(currentMatch.events, currentMatch.awayTeam.id)
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .map(event => (
-                  <div key={event.id} className="text-sm text-gray-600 mb-1">
-                    <span className="mr-1">{EVENT_EMOJIS[event.type]}</span>
-                    <span className="font-medium">{event.player.name}</span>
-                    {' - '}
-                    {event.type.replace('_', ' ')}
-                  </div>
-                ))
-              }
+            <div className="mt-6 bg-gray-50 p-4 rounded-lg max-h-48 overflow-y-auto shadow-sm">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Current Play Events</h4>
+              {getCurrentPlayEvents(currentMatch.events, currentMatch.awayTeam.id).length > 0 ? (
+                getCurrentPlayEvents(currentMatch.events, currentMatch.awayTeam.id)
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map(event => (
+                    <div key={event.id} className="text-sm text-gray-600 mb-2 bg-white p-2 rounded-md shadow-sm">
+                      <span className="mr-2 text-lg">{EVENT_EMOJIS[event.type]}</span>
+                      <span className="font-medium">{event.player?.name || 'Unknown Player'}</span>
+                      {' - '}
+                      <span className="text-gray-500">{event.type.replace('_', ' ')}</span>
+                    </div>
+                  ))
+              ) : (
+                <div className="text-sm text-gray-500 italic py-2">
+                  No events recorded yet
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Waiting Team */}
-        <div className="mt-8 text-center">
-          <div className="inline-block bg-gray-100 rounded-lg p-4">
-            <div className="mb-2 relative">
+        <div className="mt-12 text-center">
+          <div className="inline-block bg-gray-50 rounded-lg p-6 shadow-sm">
+            <div className="mb-3 relative">
               <FaTshirt 
                 style={{ fill: getTeamColor(currentMatch.waitingTeam).fill }}
-                className="w-12 h-12 mx-auto opacity-70 transform transition-all duration-300 hover:opacity-100"
+                className="w-16 h-16 mx-auto opacity-80 transform transition-all duration-300 hover:opacity-100"
               />
-              <div className="absolute -top-1 -right-1 bg-yellow-400 rounded-full w-5 h-5 flex items-center justify-center">
-                <span className="text-xs font-bold text-gray-900">⏳</span>
+              <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full w-6 h-6 flex items-center justify-center">
+                <span className="text-sm font-bold text-gray-900">⏳</span>
               </div>
             </div>
-            <h3 className={`text-lg font-bold max-w-[200px] truncate mx-auto flex items-center justify-center gap-2 ${getTeamColor(currentMatch.waitingTeam).text}`}>
+            <h3 className={`text-xl font-bold max-w-[240px] truncate mx-auto flex items-center justify-center gap-2 mb-3 ${getTeamColor(currentMatch.waitingTeam).text}`}>
               <span className="text-gray-900">Waiting:</span>
               <span>{currentMatch.waitingTeam.name}</span>
             </h3>
             {/* Waiting Team Current Play Events */}
-            <div className="mt-2 bg-white/50 p-2 rounded-lg max-h-32 overflow-y-auto">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Current Play Events</h4>
-              {getCurrentPlayEvents(currentMatch.events, currentMatch.waitingTeam.id)
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .map(event => (
-                  <div key={event.id} className="text-sm text-gray-600 mb-1">
-                    <span className="mr-1">{EVENT_EMOJIS[event.type]}</span>
-                    <span className="font-medium">{event.player.name}</span>
-                    {' - '}
-                    {event.type.replace('_', ' ')}
-                  </div>
-                ))
-              }
+            <div className="bg-white/70 p-3 rounded-lg max-h-36 overflow-y-auto w-80 mx-auto">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Current Play Events</h4>
+              {getCurrentPlayEvents(currentMatch.events, currentMatch.waitingTeam.id).length > 0 ? (
+                getCurrentPlayEvents(currentMatch.events, currentMatch.waitingTeam.id)
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map(event => (
+                    <div key={event.id} className="text-sm text-gray-600 mb-2 bg-white p-2 rounded-md shadow-sm">
+                      <span className="mr-2 text-lg">{EVENT_EMOJIS[event.type]}</span>
+                      <span className="font-medium">{event.player?.name || 'Unknown Player'}</span>
+                      {' - '}
+                      <span className="text-gray-500">{event.type.replace('_', ' ')}</span>
+                    </div>
+                  ))
+              ) : (
+                <div className="text-sm text-gray-500 italic py-2">
+                  No events recorded yet
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Statistics Tables */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
+        {/* Team Statistics */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold mb-6 text-gray-900">Team Statistics</h3>
+          {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].some(team => {
+            const events = currentMatch.events.filter(event => event.team === team.id);
+            return events.length > 0;
+          }) ? (
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th className="text-left text-gray-900 pb-4">Team</th>
+                  <th className="text-center text-gray-900 pb-4">Goals</th>
+                  <th className="text-center text-gray-900 pb-4">Saves</th>
+                  <th className="text-center text-gray-900 pb-4">Wins</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team: Team) => {
+                  const teamEvents = currentMatch.events.filter(
+                    (event) => event.team === team.id
+                  )
+                  const goals = teamEvents.filter(
+                    (event) => event.type === "GOAL"
+                  ).length
+                  const saves = teamEvents.filter(
+                    (event) => event.type === "SAVE"
+                  ).length
+                  const wins = currentMatch.events.filter(
+                    (event) => event.type === "WIN" && event.team === team.id
+                  ).length
+
+                  return (
+                    <tr key={team.id} className="border-t border-gray-100">
+                      <td className="py-4 text-gray-900 font-medium">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: getTeamColor(team).fill }}
+                          />
+                          {team.name}
+                        </div>
+                      </td>
+                      <td className="text-center text-gray-900 py-4">{goals || '-'}</td>
+                      <td className="text-center text-gray-900 py-4">{saves || '-'}</td>
+                      <td className="text-center text-gray-900 py-4">{wins || '-'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-center text-gray-500 italic py-8">
+              No team statistics available yet
+            </div>
+          )}
+        </div>
+
+        {/* Player Statistics */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold mb-6 text-gray-900">Player Statistics</h3>
+          {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].some(teamPlayer => {
+            const events = currentMatch.events.filter(event => event.playerId === teamPlayer.player.id);
+            return events.length > 0;
+          }) ? (
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th className="text-left text-gray-900 pb-4">Player</th>
+                  <th className="text-center text-gray-900 pb-4">Goals</th>
+                  <th className="text-center text-gray-900 pb-4">Assists</th>
+                  <th className="text-center text-gray-900 pb-4">Saves</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players]
+                  .map((teamPlayer: TeamPlayer) => {
+                    const playerEvents = currentMatch.events.filter(
+                      (event) => event.playerId === teamPlayer.player.id
+                    )
+                    const goals = playerEvents.filter(
+                      (event) => event.type === "GOAL"
+                    ).length
+                    const assists = playerEvents.filter(
+                      (event) => event.type === "ASSIST"
+                    ).length
+                    const saves = playerEvents.filter(
+                      (event) => event.type === "SAVE"
+                    ).length
+
+                    return (
+                      <tr key={teamPlayer.player.id} className="border-t border-gray-100">
+                        <td className="py-4 text-gray-900 font-medium">{teamPlayer.player.name}</td>
+                        <td className="text-center text-gray-900 py-4">{goals || '-'}</td>
+                        <td className="text-center text-gray-900 py-4">{assists || '-'}</td>
+                        <td className="text-center text-gray-900 py-4">{saves || '-'}</td>
+                      </tr>
+                    )
+                  })
+                  .filter(Boolean)}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-center text-gray-500 italic py-8">
+              No player statistics available yet
+            </div>
+          )}
         </div>
       </div>
 
@@ -1124,90 +1398,6 @@ export function FixtureClient({
           </div>
         </div>
       )}
-
-      {/* Statistics Tables */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Team Statistics */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Team Statistics</h3>
-          <table className="min-w-full">
-            <thead>
-              <tr>
-                <th className="text-left text-gray-900">Team</th>
-                <th className="text-center text-gray-900">Goals</th>
-                <th className="text-center text-gray-900">Saves</th>
-                <th className="text-center text-gray-900">Wins</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[currentMatch.homeTeam, currentMatch.awayTeam, currentMatch.waitingTeam].map((team: Team) => {
-                const teamEvents = currentMatch.events.filter(
-                  (event) => event.team === team.id
-                )
-                const goals = teamEvents.filter(
-                  (event) => event.type === "GOAL"
-                ).length
-                const saves = teamEvents.filter(
-                  (event) => event.type === "SAVE"
-                ).length
-                // Calculate wins based on WIN events
-                const wins = currentMatch.events.filter(
-                  (event) => event.type === "WIN" && event.team === team.id
-                ).length
-
-                return (
-                  <tr key={team.id}>
-                    <td className="text-gray-900">{team.name}</td>
-                    <td className="text-center text-gray-900">{goals}</td>
-                    <td className="text-center text-gray-900">{saves}</td>
-                    <td className="text-center text-gray-900">{wins}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Player Statistics */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Player Statistics</h3>
-          <table className="min-w-full">
-            <thead>
-              <tr>
-                <th className="text-left text-gray-900">Player</th>
-                <th className="text-center text-gray-900">Goals</th>
-                <th className="text-center text-gray-900">Assists</th>
-                <th className="text-center text-gray-900">Saves</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...currentMatch.homeTeam.players, ...currentMatch.awayTeam.players, ...currentMatch.waitingTeam.players].map((teamPlayer: TeamPlayer) => {
-                const playerEvents = currentMatch.events.filter(
-                  (event) => event.playerId === teamPlayer.player.id
-                )
-                const goals = playerEvents.filter(
-                  (event) => event.type === "GOAL"
-                ).length
-                const assists = playerEvents.filter(
-                  (event) => event.type === "ASSIST"
-                ).length
-                const saves = playerEvents.filter(
-                  (event) => event.type === "SAVE"
-                ).length
-
-                return (
-                  <tr key={teamPlayer.player.id}>
-                    <td className="text-gray-900">{teamPlayer.player.name}</td>
-                    <td className="text-center text-gray-900">{goals}</td>
-                    <td className="text-center text-gray-900">{assists}</td>
-                    <td className="text-center text-gray-900">{saves}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   )
 } 

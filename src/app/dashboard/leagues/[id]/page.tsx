@@ -24,14 +24,14 @@ type League = {
   id: string
   name: string
   ownerId: string
+  stats: LeagueStats
+  joinRequests: JoinRequest[]
 }
 
 export default function LeaguePage() {
   const { data: session } = useSession()
   const params = useParams()
   const [league, setLeague] = useState<League | null>(null)
-  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([])
-  const [stats, setStats] = useState<LeagueStats>({ totalPlayers: 0, totalSeasons: 0 })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,25 +39,14 @@ export default function LeaguePage() {
     const fetchData = async () => {
       try {
         setIsLoading(true)
-        const [leagueResponse, requestsResponse, statsResponse] = await Promise.all([
-          fetch(`/api/leagues/${params.id}`),
-          fetch(`/api/leagues/${params.id}/join-requests`),
-          fetch(`/api/leagues/${params.id}/stats`),
-        ])
+        const response = await fetch(`/api/leagues/${params.id}`)
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch league data')
+        }
 
-        if (!leagueResponse.ok) throw new Error('Failed to fetch league')
-        if (!requestsResponse.ok) throw new Error('Failed to fetch join requests')
-        if (!statsResponse.ok) throw new Error('Failed to fetch league statistics')
-
-        const [leagueData, requestsData, statsData] = await Promise.all([
-          leagueResponse.json(),
-          requestsResponse.json(),
-          statsResponse.json(),
-        ])
-
-        setLeague(leagueData)
-        setJoinRequests(requestsData)
-        setStats(statsData)
+        const data = await response.json()
+        setLeague(data)
       } catch (error) {
         console.error('Error fetching data:', error)
         setError(error instanceof Error ? error.message : 'Failed to fetch data')
@@ -72,8 +61,23 @@ export default function LeaguePage() {
   }, [params.id, session])
 
   const handleJoinRequest = async (requestId: string, action: 'accept' | 'reject') => {
+    if (!league) return
+
     try {
-      const response = await fetch(`/api/leagues/${params.id}/join-requests/${requestId}`, {
+      // Optimistically update UI
+      setLeague(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          joinRequests: prev.joinRequests.filter(req => req.id !== requestId),
+          stats: {
+            ...prev.stats,
+            totalPlayers: action === 'accept' ? prev.stats.totalPlayers + 1 : prev.stats.totalPlayers
+          }
+        }
+      })
+
+      const response = await fetch(`/api/leagues/${params.id}/join/${requestId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -82,31 +86,53 @@ export default function LeaguePage() {
       })
 
       if (!response.ok) {
+        // Revert optimistic update on error
         const data = await response.json()
         throw new Error(data.message || 'Failed to update join request')
       }
 
-      // Remove the request from the list
-      setJoinRequests(joinRequests.filter(request => request.id !== requestId))
-
-      // If accepted, increment the player count and trigger a leagues refetch
-      if (action === 'accept') {
-        setStats(prev => ({
-          ...prev,
-          totalPlayers: prev.totalPlayers + 1
-        }))
-        
-        // Trigger a refetch of the user's leagues
-        const leaguesResponse = await fetch('/api/leagues')
-        if (leaguesResponse.ok) {
-          // This will update the leagues cache in the background
-          await leaguesResponse.json()
-        }
+      // Refresh league data in the background
+      const refreshResponse = await fetch(`/api/leagues/${params.id}`)
+      if (refreshResponse.ok) {
+        const refreshedData = await refreshResponse.json()
+        setLeague(refreshedData)
       }
     } catch (error) {
       console.error('Error updating join request:', error)
       setError(error instanceof Error ? error.message : 'Failed to update join request')
+      
+      // Refresh data to ensure UI is in sync
+      const response = await fetch(`/api/leagues/${params.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setLeague(data)
+      }
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 bg-white rounded-lg shadow">
+        <h3 className="text-lg font-medium text-red-600">Error</h3>
+        <p className="mt-2 text-sm text-gray-500">{error}</p>
+      </div>
+    )
+  }
+
+  if (!league) {
+    return (
+      <div className="text-center py-12 bg-white rounded-lg shadow">
+        <h3 className="text-lg font-medium text-gray-900">League not found</h3>
+      </div>
+    )
   }
 
   const isAdmin = session?.user?.role === 'ADMIN'
@@ -116,7 +142,7 @@ export default function LeaguePage() {
   return (
     <div className="space-y-6 px-4 py-6 md:px-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-gray-900">{league?.name || 'Loading...'}</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">{league.name}</h1>
         {canManageLeague && (
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
@@ -163,11 +189,11 @@ export default function LeaguePage() {
             <dl className="mt-5 grid grid-cols-2 gap-4">
               <div className="bg-gray-50 px-4 py-5 rounded-lg">
                 <dt className="text-sm font-medium text-gray-500">Total Players</dt>
-                <dd className="mt-1 text-2xl sm:text-3xl font-semibold text-gray-900">{stats.totalPlayers}</dd>
+                <dd className="mt-1 text-2xl sm:text-3xl font-semibold text-gray-900">{league.stats.totalPlayers}</dd>
               </div>
               <div className="bg-gray-50 px-4 py-5 rounded-lg">
                 <dt className="text-sm font-medium text-gray-500">Total Seasons</dt>
-                <dd className="mt-1 text-2xl sm:text-3xl font-semibold text-gray-900">{stats.totalSeasons}</dd>
+                <dd className="mt-1 text-2xl sm:text-3xl font-semibold text-gray-900">{league.stats.totalSeasons}</dd>
               </div>
             </dl>
           </div>
@@ -177,19 +203,11 @@ export default function LeaguePage() {
           <div>
             <div className="bg-white shadow rounded-lg p-6">
               <h2 className="text-lg font-medium text-gray-900 mb-4">Join Requests</h2>
-              {isLoading ? (
-                <div className="text-center py-4">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
-                </div>
-              ) : error ? (
-                <div className="text-center py-4">
-                  <p className="text-sm text-red-600">{error}</p>
-                </div>
-              ) : joinRequests.length === 0 ? (
+              {league.joinRequests.length === 0 ? (
                 <p className="text-sm text-gray-500">No pending requests</p>
               ) : (
                 <div className="space-y-4">
-                  {joinRequests.map((request) => (
+                  {league.joinRequests.map((request) => (
                     <div key={request.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="text-sm text-gray-900 font-medium">
                         {request.user.name || request.user.email}

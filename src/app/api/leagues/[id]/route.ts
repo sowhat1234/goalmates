@@ -19,14 +19,26 @@ export async function GET(
     const params = await props.params
     const { id } = params
 
-    // Check if the user is the league owner, a player, or an admin
+    // Fetch all required data in a single query
     const league = await prisma.league.findUnique({
       where: { id },
       include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         players: {
-          where: {
-            userId: session.user.id
-          }
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
         },
         seasons: {
           orderBy: {
@@ -37,6 +49,25 @@ export async function GET(
             name: true,
             startDate: true,
             endDate: true
+          }
+        },
+        joinRequests: {
+          where: {
+            status: "PENDING"
+          },
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            user: {
+              select: {
+                name: true,
+                email: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: "desc"
           }
         },
         _count: {
@@ -53,14 +84,24 @@ export async function GET(
     }
 
     const isOwner = league.ownerId === session.user.id
-    const isPlayer = league.players.length > 0
+    const isPlayer = league.players.some(player => player.userId === session.user.id)
     const isAdmin = session.user.role === "ADMIN"
 
     if (!isOwner && !isPlayer && !isAdmin) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    return NextResponse.json(league)
+    // Transform the data to match the expected format
+    const response = {
+      ...league,
+      stats: {
+        totalPlayers: league._count.players,
+        totalSeasons: league._count.seasons
+      },
+      joinRequests: isOwner || isAdmin ? league.joinRequests : []
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error("[LEAGUE_GET]", error)
     return new NextResponse("Internal Error", { status: 500 })

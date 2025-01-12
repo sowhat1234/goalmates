@@ -56,22 +56,28 @@ export async function GET(
           orderBy: {
             date: "desc"
           },
-          select: {
-            id: true,
-            date: true,
-            status: true,
+          include: {
             matches: {
               include: {
                 homeTeam: {
                   select: {
                     id: true,
-                    name: true
+                    name: true,
+                    color: true
                   }
                 },
                 awayTeam: {
                   select: {
                     id: true,
-                    name: true
+                    name: true,
+                    color: true
+                  }
+                },
+                waitingTeam: {
+                  select: {
+                    id: true,
+                    name: true,
+                    color: true
                   }
                 },
                 events: {
