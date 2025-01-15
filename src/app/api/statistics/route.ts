@@ -36,7 +36,7 @@ export async function GET() {
       league: player.league,
       stats: {
         goals: player.events.filter(e => e.type === "GOAL").length,
-        assists: player.events.filter(e => e.type === "ASSIST").length,
+        assists: player.events.filter(e => e.assistPlayerId).length,
         saves: player.events.filter(e => e.type === "SAVE").length,
         yellowCards: player.events.filter(e => e.type === "YELLOW_CARD").length,
         redCards: player.events.filter(e => e.type === "RED_CARD").length,

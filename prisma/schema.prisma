@@ -92,7 +92,8 @@ model Player {
   leagueId  String
   league    League      @relation(fields: [leagueId], references: [id])
   teams     PlayerTeam[]
-  events    Event[]
+  events    Event[]     @relation("PlayerEvents")
+  assists   Event[]     @relation("AssistPlayerEvents")
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }
@@ -118,6 +119,8 @@ model Match {
   homeTeamId    String
   awayTeamId    String
   waitingTeamId String
+  status        String   @default("IN_PROGRESS")  // Can be IN_PROGRESS or COMPLETED
+  winningTeamId String?  // ID of the team that won this match
   events        Event[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -140,7 +143,9 @@ model Event {
   matchId         String
   match           Match     @relation(fields: [matchId], references: [id])
   playerId        String?
-  player          Player?   @relation(fields: [playerId], references: [id])
+  player          Player?   @relation("PlayerEvents", fields: [playerId], references: [id])
+  assistPlayerId  String?   // Player who assisted the goal
+  assistPlayer    Player?   @relation("AssistPlayerEvents", fields: [assistPlayerId], references: [id])
   type            String    // Goal, Save, Miss, Card, etc.
   subType         String?   // Penalty, Chip shot, etc.
   isHighlight     Boolean   @default(false)

@@ -82,27 +82,59 @@ const getStatusBadgeClasses = (status: string) => {
   }
 }
 
-const getWinningTeam = (match: Season['fixtures'][0]['matches'][0]) => {
-  // Count goals for each team
-  const homeTeamGoals = match.events.filter(e => e.type === 'GOAL' && e.team === 'HOME').length
-  const awayTeamGoals = match.events.filter(e => e.type === 'GOAL' && e.team === 'AWAY').length
-  const waitingTeamGoals = match.events.filter(e => e.type === 'GOAL' && e.team === 'WAITING').length
-
-  const scores = [
-    { team: match.homeTeam, goals: homeTeamGoals },
-    { team: match.awayTeam, goals: awayTeamGoals }
-  ]
+const getWinningTeam = (match: { 
+  id: string; 
+  homeTeam: { id: string; name: string; color: string; }; 
+  awayTeam: { id: string; name: string; color: string; }; 
+  waitingTeam?: { id: string; name: string; color: string; } | undefined; 
+  events: { type: string; team: string; }[];
+  status?: string;
+}) => {
+  // First check for WIN event
+  const winEvent = match.events.find(e => e.type === 'WIN')
+  if (winEvent) {
+    const team = [match.homeTeam, match.awayTeam, match.waitingTeam].find(t => t?.id === winEvent.team)
+    if (team) {
+      return { 
+        team, 
+        goals: match.events.filter(e => e.type === 'GOAL' && e.team === team.id).length 
+      }
+    }
+  }
   
-  if (match.waitingTeam) {
-    scores.push({ team: match.waitingTeam, goals: waitingTeamGoals })
+  // If no WIN event but match is completed, fall back to goals
+  if (match.status === 'COMPLETED') {
+    const homeTeamGoals = match.events.filter(e => e.type === 'GOAL' && e.team === match.homeTeam.id).length
+    const awayTeamGoals = match.events.filter(e => e.type === 'GOAL' && e.team === match.awayTeam.id).length
+    const waitingTeamGoals = match.waitingTeam ? 
+      match.events.filter(e => e.type === 'GOAL' && e.team === match.waitingTeam?.id).length : 0
+
+    const scores = [
+      { team: match.homeTeam, goals: homeTeamGoals },
+      { team: match.awayTeam, goals: awayTeamGoals }
+    ]
+    
+    if (match.waitingTeam) {
+      scores.push({ team: match.waitingTeam, goals: waitingTeamGoals })
+    }
+
+    scores.sort((a, b) => b.goals - a.goals)
+    return scores[0].goals > scores[1].goals ? scores[0] : null
   }
 
-  // Sort by goals in descending order
-  scores.sort((a, b) => b.goals - a.goals)
-
-  // Return the team with most goals, or null if it's a tie
-  return scores[0].goals > scores[1].goals ? scores[0] : null
+  return null
 }
+
+const TeamDisplay = ({ team, isWinner }: { team: { name: string, color: string }, isWinner: boolean }) => (
+  <span className={`inline-flex items-center text-gray-900 ${isWinner ? 'font-bold' : 'text-gray-600'}`}>
+    {isWinner && (
+      <svg className="w-4 h-4 mr-1 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M10 2l2.5 5 5.5.8-4 3.9.9 5.3-4.9-2.6L5.1 17l.9-5.3-4-3.9 5.5-.8z" />
+      </svg>
+    )}
+    {team.name}
+  </span>
+)
 
 export default function SeasonPage() {
   const params = useParams()
@@ -271,7 +303,7 @@ export default function SeasonPage() {
                     </Link>
                   </div>
                   <div className="space-y-4">
-                    {fixture.matches?.map((match) => {
+                    {fixture.matches?.slice(0, 3).map((match) => {
                       const winningTeam = fixture.status === 'COMPLETED' ? getWinningTeam(match) : null
                       return (
                         <div key={match.id} className="border-t border-gray-200 pt-4">
@@ -282,9 +314,7 @@ export default function SeasonPage() {
                                   className="w-4 h-4 rounded-full"
                                   style={{ backgroundColor: match.homeTeam.color }}
                                 />
-                                <span className={`text-sm font-medium ${winningTeam?.team.id === match.homeTeam.id ? 'text-green-600 font-bold' : 'text-gray-900'}`}>
-                                  {match.homeTeam.name}
-                                </span>
+                                <TeamDisplay team={match.homeTeam} isWinner={winningTeam?.team.id === match.homeTeam.id} />
                               </div>
                               <span className="text-sm text-gray-500">vs</span>
                               <div className="flex flex-col items-center">
@@ -292,9 +322,7 @@ export default function SeasonPage() {
                                   className="w-4 h-4 rounded-full"
                                   style={{ backgroundColor: match.awayTeam.color }}
                                 />
-                                <span className={`text-sm font-medium ${winningTeam?.team.id === match.awayTeam.id ? 'text-green-600 font-bold' : 'text-gray-900'}`}>
-                                  {match.awayTeam.name}
-                                </span>
+                                <TeamDisplay team={match.awayTeam} isWinner={winningTeam?.team.id === match.awayTeam.id} />
                               </div>
                               {match.waitingTeam && (
                                 <>
@@ -304,9 +332,7 @@ export default function SeasonPage() {
                                       className="w-4 h-4 rounded-full"
                                       style={{ backgroundColor: match.waitingTeam.color }}
                                     />
-                                    <span className={`text-sm font-medium ${winningTeam?.team.id === match.waitingTeam.id ? 'text-green-600 font-bold' : 'text-gray-900'}`}>
-                                      {match.waitingTeam.name}
-                                    </span>
+                                    <TeamDisplay team={match.waitingTeam} isWinner={winningTeam?.team.id === match.waitingTeam.id} />
                                   </div>
                                 </>
                               )}
@@ -325,6 +351,16 @@ export default function SeasonPage() {
                         </div>
                       )
                     })}
+                    {fixture.matches && fixture.matches.length > 3 && (
+                      <div className="mt-4 text-center">
+                        <Link
+                          href={`/dashboard/leagues/${params.id}/seasons/${season.id}/fixtures/${fixture.id}`}
+                          className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          Show {fixture.matches.length - 3} More Matches
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

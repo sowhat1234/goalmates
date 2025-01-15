@@ -56,7 +56,7 @@ export async function GET() {
 
         const stats = {
           goals: events.filter(e => e.type === "GOAL").length,
-          assists: events.filter(e => e.type === "ASSIST").length,
+          assists: events.filter(e => e.assistPlayerId === player.id).length,
           saves: events.filter(e => e.type === "SAVE").length,
           yellowCards: events.filter(e => e.type === "YELLOW_CARD").length,
           redCards: events.filter(e => e.type === "RED_CARD").length,

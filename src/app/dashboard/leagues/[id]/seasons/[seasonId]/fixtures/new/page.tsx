@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { redirect } from "next/navigation"
 
 interface Player {
   id: string
@@ -182,7 +183,7 @@ export default function NewFixturePage({
 
     setLoading(true)
     try {
-      // Clean up any existing localStorage data for old fixtures
+      // Clean up localStorage
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key?.startsWith('fixture_teams_') || key?.startsWith('fixture_timer_')) {
@@ -216,32 +217,13 @@ export default function NewFixturePage({
       })
 
       if (!response.ok) {
-        const errorData = await response.text()
-        throw new Error(errorData || "Failed to create fixture")
+        throw new Error(await response.text() || "Failed to create fixture")
       }
 
       const newFixture = await response.json()
-      
-      // Store team configurations in localStorage
-      localStorage.setItem(`fixture_teams_${newFixture.id}`, JSON.stringify({
-        homeTeam: {
-          name: teams.find(t => t.id === "home")?.name,
-          color: teams.find(t => t.id === "home")?.color,
-          players: teams.find(t => t.id === "home")?.players
-        },
-        awayTeam: {
-          name: teams.find(t => t.id === "away")?.name,
-          color: teams.find(t => t.id === "away")?.color,
-          players: teams.find(t => t.id === "away")?.players
-        },
-        waitingTeam: {
-          name: teams.find(t => t.id === "waiting")?.name,
-          color: teams.find(t => t.id === "waiting")?.color,
-          players: teams.find(t => t.id === "waiting")?.players
-        }
-      }))
 
-      router.push(`/dashboard/leagues/${resolvedParams.id}/seasons/${resolvedParams.seasonId}/fixtures/${newFixture.id}`)
+      // Important: Wait for the redirect to complete
+      await router.push(`/dashboard/leagues/${resolvedParams.id}/seasons/${resolvedParams.seasonId}/fixtures/${newFixture.id}/setup`)
     } catch (error) {
       console.error("Failed to create fixture:", error)
       setError(error instanceof Error ? error.message : "Failed to create fixture. Please try again.")
@@ -367,9 +349,16 @@ export default function NewFixturePage({
           <button
             type="submit"
             disabled={loading || playersLoading || players.length === 0}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 flex items-center justify-center min-w-[120px]"
           >
-            {loading ? "Creating..." : "Create Fixture"}
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Creating...
+              </>
+            ) : (
+              "Create Fixture"
+            )}
           </button>
         </div>
       </form>

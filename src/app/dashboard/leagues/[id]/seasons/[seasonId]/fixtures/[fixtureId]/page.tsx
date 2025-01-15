@@ -1,169 +1,158 @@
-import { Suspense } from "react"
-import { FixtureClient } from "./components/fixture-client"
-import { notFound } from "next/navigation"
-import { prisma } from "@/lib/prisma"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { Fixture as PrismaFixture, Team, Event, Player } from "@prisma/client"
+import { Suspense } from 'react'
+import { FixtureClient } from '@/components/fixture/match/fixture-client'
+import { FixtureLoading } from '@/components/fixture/FixtureLoading'
+import { FixtureErrorBoundary } from '@/components/fixture/FixtureErrorBoundary'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import type { Fixture } from '@/types/fixture.types'
 
-interface SerializedEvent extends Omit<Event, 'createdAt' | 'updatedAt' | 'timestamp'> {
-  createdAt: string;
-  updatedAt: string;
-  timestamp: string | null;
-  player: Player;
+interface PageProps {
+  params: Promise<{
+    id: string
+    seasonId: string
+    fixtureId: string
+  }>
 }
 
-interface SerializedTeam extends Team {
-  players: { player: Player }[];
-}
+async function getFixture(id: string, seasonId: string, fixtureId: string): Promise<Fixture> {
+  try {
+    console.log('Fetching fixture:', { id, seasonId, fixtureId })
+    
+    // Get the session directly in the server component
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      throw new Error('Unauthorized: No session or user')
+    }
 
-interface SerializedMatch {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  homeTeam: SerializedTeam;
-  awayTeam: SerializedTeam;
-  waitingTeam: SerializedTeam;
-  events: SerializedEvent[];
-}
-
-interface SerializedFixture extends Omit<PrismaFixture, 'date' | 'createdAt' | 'updatedAt'> {
-  date: string;
-  createdAt: string;
-  updatedAt: string;
-  matches: SerializedMatch[];
-}
-
-async function getFixtureData(id: string, seasonId: string, fixtureId: string) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    throw new Error('Unauthorized')
-  }
-
-  // First check if user has access to the league
-  const league = await prisma.league.findUnique({
-    where: { id },
-    include: {
-      players: {
-        where: {
-          userId: session.user.id
+    // First check if user has access to the league
+    const league = await prisma.league.findUnique({
+      where: { id },
+      include: {
+        players: {
+          where: {
+            userId: session.user.id
+          }
         }
       }
+    })
+
+    if (!league) {
+      throw new Error('League not found')
     }
-  })
 
-  if (!league) {
-    throw new Error('League not found')
-  }
+    const isOwner = league.ownerId === session.user.id
+    const isPlayer = league.players.length > 0
+    const isAdmin = session.user.role === "ADMIN"
 
-  const isOwner = league.ownerId === session.user.id
-  const isPlayer = league.players.length > 0
-  const isAdmin = session.user.role === "ADMIN"
+    if (!isOwner && !isPlayer && !isAdmin) {
+      throw new Error('Unauthorized: No access to league')
+    }
 
-  if (!isOwner && !isPlayer && !isAdmin) {
-    throw new Error('Unauthorized')
-  }
-
-  // Then fetch the fixture
-  const fixture = await prisma.fixture.findFirst({
-    where: {
-      id: fixtureId,
-      seasonId: seasonId,
-      season: {
-        league: {
-          id: id,
+    // Then fetch the fixture
+    const fixture = await prisma.fixture.findFirst({
+      where: {
+        id: fixtureId,
+        seasonId: seasonId,
+        season: {
+          league: {
+            id,
+          },
         },
       },
-    },
-    include: {
-      matches: {
-        include: {
-          homeTeam: {
-            include: {
-              players: {
-                include: {
-                  player: true
+      include: {
+        matches: {
+          include: {
+            homeTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
                 }
               }
-            }
-          },
-          awayTeam: {
-            include: {
-              players: {
-                include: {
-                  player: true
-                }
-              }
-            }
-          },
-          waitingTeam: {
-            include: {
-              players: {
-                include: {
-                  player: true
-                }
-              }
-            }
-          },
-          events: {
-            include: {
-              player: true
             },
-            orderBy: {
-              createdAt: "desc"
+            awayTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            waitingTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            events: {
+              include: {
+                player: true,
+                assistPlayer: true
+              },
+              orderBy: {
+                createdAt: "desc"
+              }
             }
           }
         }
       }
+    })
+
+    if (!fixture) {
+      throw new Error('Fixture not found')
     }
-  })
 
-  if (!fixture) {
-    throw new Error('Fixture not found')
-  }
-
-  // Convert dates to ISO strings to match the expected type
-  return {
-    ...fixture,
-    date: fixture.date.toISOString(),
-    createdAt: fixture.createdAt.toISOString(),
-    updatedAt: fixture.updatedAt.toISOString(),
-    matches: fixture.matches.map(match => ({
-      ...match,
-      createdAt: match.createdAt.toISOString(),
-      updatedAt: match.updatedAt.toISOString(),
-      events: match.events.map(event => ({
-        ...event,
-        createdAt: event.createdAt.toISOString(),
-        updatedAt: event.updatedAt.toISOString(),
-        timestamp: event.timestamp?.toISOString() || null
+    // Convert Date objects to ISO strings
+    const serializedFixture: Fixture = {
+      ...fixture,
+      date: fixture.date.toISOString(),
+      createdAt: fixture.createdAt.toISOString(),
+      updatedAt: fixture.updatedAt.toISOString(),
+      matches: fixture.matches.map(match => ({
+        ...match,
+        createdAt: match.createdAt.toISOString(),
+        updatedAt: match.updatedAt.toISOString(),
+        events: match.events
+          .filter(event => event.playerId !== null)
+          .map(event => ({
+            ...event,
+            playerId: event.playerId!,
+            createdAt: event.createdAt.toISOString(),
+            updatedAt: event.updatedAt.toISOString(),
+            timestamp: event.timestamp?.toISOString() || null
+          }))
       }))
-    }))
-  } as SerializedFixture
+    }
+
+    console.log('Fixture data received:', serializedFixture.id)
+    return serializedFixture
+  } catch (error) {
+    console.error('Error in getFixture:', error)
+    throw error
+  }
 }
 
-type PageParams = Promise<{
-  id: string
-  seasonId: string
-  fixtureId: string
-}>
-
-export default async function FixtureDetailPage({
-  params
-}: {
-  params: PageParams
-}) {
+export default async function Page({ params }: PageProps) {
   try {
+    // We need to await the params in Next.js 15
     const resolvedParams = await params
-    const fixture = await getFixtureData(
+    console.log('Resolved params in page:', resolvedParams)
+
+    const fixture = await getFixture(
       resolvedParams.id,
       resolvedParams.seasonId,
       resolvedParams.fixtureId
     )
 
     return (
-      <div className="min-h-screen bg-gray-100">
-        <Suspense fallback={<div className="text-center p-6">Loading...</div>}>
+      <FixtureErrorBoundary>
+        <Suspense fallback={<FixtureLoading />}>
           <FixtureClient 
             fixture={fixture}
             id={resolvedParams.id}
@@ -171,27 +160,10 @@ export default async function FixtureDetailPage({
             fixtureId={resolvedParams.fixtureId}
           />
         </Suspense>
-      </div>
+      </FixtureErrorBoundary>
     )
   } catch (error) {
-    console.error('Error loading fixture:', error)
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold text-red-600 mb-2">Unauthorized</h2>
-            <p className="text-gray-600">You do not have permission to view this fixture.</p>
-          </div>
-        </div>
-      )
-    }
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Fixture</h2>
-          <p className="text-gray-600">There was a problem loading the fixture details. Please try again later.</p>
-        </div>
-      </div>
-    )
+    console.error('Error in page component:', error)
+    throw error
   }
 } 

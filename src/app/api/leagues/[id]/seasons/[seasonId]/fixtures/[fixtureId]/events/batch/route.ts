@@ -16,7 +16,8 @@ const batchEventSchema = z.object({
     type: z.enum(["GOAL", "ASSIST", "SAVE", "YELLOW_CARD", "RED_CARD", "WOW_MOMENT", "WIN"]),
     playerId: z.union([z.string(), z.literal("")]),
     matchId: z.string(),
-    team: z.string()
+    team: z.string(),
+    assistPlayerId: z.string().optional()
   }))
 })
 
@@ -51,7 +52,37 @@ export async function POST(
         }
       },
       include: {
-        matches: true
+        matches: {
+          include: {
+            homeTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            awayTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            waitingTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     })
 
@@ -80,13 +111,25 @@ export async function POST(
           type: event.type,
           matchId: event.matchId,
           team: event.team,
-          ...(event.type !== "WIN" ? { playerId: event.playerId } : {})  // Only include playerId for non-WIN events
+          ...(event.type !== "WIN" ? { playerId: event.playerId } : {}),  // Only include playerId for non-WIN events
+          ...(event.type === "GOAL" && event.assistPlayerId ? { assistPlayerId: event.assistPlayerId } : {})
         }
 
         const newEvent = await tx.event.create({
           data: eventData,
           include: {
-            player: event.type !== "WIN"  // Only include player for non-WIN events
+            player: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
+            assistPlayer: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         })
 
@@ -94,6 +137,9 @@ export async function POST(
       }
 
       return results
+    }, {
+      maxWait: 5000,
+      timeout: 10000
     })
 
     return NextResponse.json(createdEvents)

@@ -11,28 +11,63 @@ type RouteParams = Promise<{
 
 export async function GET(
   request: Request,
-  props: { params: RouteParams }
+  { params }: { params: RouteParams }
 ) {
   try {
+    console.log('GET request received for fixture')
+    
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.id) {
-      return new NextResponse("Unauthorized", { status: 401 })
+      console.log('Unauthorized: No session or user')
+      return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const params = await props.params
-    const { id, seasonId, fixtureId } = params
+    // We need to await the params in Next.js 15
+    const resolvedParams = await params
+    console.log('Resolved params:', resolvedParams)
+    const { id, seasonId, fixtureId } = resolvedParams
 
-    console.log('Fetching fixture:', { id, seasonId, fixtureId })
+    // First check if user has access to the league
+    const league = await prisma.league.findUnique({
+      where: { id },
+      include: {
+        players: {
+          where: {
+            userId: session.user.id
+          }
+        }
+      }
+    })
 
+    if (!league) {
+      console.log('League not found:', id)
+      return new NextResponse('League not found', { status: 404 })
+    }
+
+    console.log('League found:', league.id)
+    const isOwner = league.ownerId === session.user.id
+    const isPlayer = league.players.length > 0
+    const isAdmin = session.user.role === "ADMIN"
+
+    if (!isOwner && !isPlayer && !isAdmin) {
+      console.log('User not authorized for league:', {
+        isOwner,
+        isPlayer,
+        isAdmin,
+        userId: session.user.id,
+        leagueId: league.id
+      })
+      return new NextResponse('Unauthorized', { status: 401 })
+    }
+
+    // Then fetch the fixture
     const fixture = await prisma.fixture.findFirst({
       where: {
         id: fixtureId,
         seasonId: seasonId,
         season: {
           league: {
-            id: id,
-            ownerId: session.user.id,
+            id,
           },
         },
       },
@@ -68,7 +103,8 @@ export async function GET(
             },
             events: {
               include: {
-                player: true
+                player: true,
+                assistPlayer: true
               },
               orderBy: {
                 createdAt: "desc"
@@ -80,16 +116,20 @@ export async function GET(
     })
 
     if (!fixture) {
-      console.log('Fixture not found:', { id, seasonId, fixtureId })
-      return new NextResponse("Not Found", { status: 404 })
+      console.log('Fixture not found:', {
+        fixtureId,
+        seasonId,
+        leagueId: id
+      })
+      return new NextResponse('Fixture not found', { status: 404 })
     }
 
-    console.log('Fixture found:', { id: fixture.id })
+    console.log('Fixture found:', fixture.id)
     return NextResponse.json(fixture)
   } catch (error) {
-    console.error("[FIXTURE_GET]", error)
+    console.error('Error in fixture GET route:', error)
     return new NextResponse(
-      error instanceof Error ? error.message : "Internal Error",
+      error instanceof Error ? error.message : 'Internal Server Error',
       { status: 500 }
     )
   }
@@ -97,17 +137,16 @@ export async function GET(
 
 export async function DELETE(
   request: Request,
-  props: { params: RouteParams }
+  { params }: { params: RouteParams }
 ) {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.id) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    const params = await props.params
-    const { id: leagueId, seasonId, fixtureId } = params
+    const resolvedParams = await params
+    const { id: leagueId, seasonId, fixtureId } = resolvedParams
 
     // Verify the fixture exists and belongs to the user
     const fixture = await prisma.fixture.findFirst({

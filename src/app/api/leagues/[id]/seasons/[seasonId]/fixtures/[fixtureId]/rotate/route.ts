@@ -54,21 +54,56 @@ export async function POST(
       return new NextResponse("No matches found in fixture", { status: 400 })
     }
 
-    const match = fixture.matches[0]
+    // Find the current active match
+    const currentMatch = fixture.matches.find(m => m.status === 'IN_PROGRESS')
+    if (!currentMatch) {
+      return new NextResponse("No active match found", { status: 400 })
+    }
     
     // Get the team IDs from the request body
     const body = await req.json()
     const { winningTeamId, losingTeamId } = body
 
-    // Rotate teams: winner stays home, waiting -> away, loser -> waiting
-    const updatedMatch = await prisma.match.update({
-      where: {
-        id: match.id
-      },
+    // First mark the current match as completed and create a WIN event
+    await prisma.$transaction([
+      prisma.match.update({
+        where: {
+          id: currentMatch.id
+        },
+        data: {
+          status: "COMPLETED",
+          winningTeamId: winningTeamId
+        }
+      }),
+      prisma.event.create({
+        data: {
+          type: "WIN",
+          matchId: currentMatch.id,
+          team: winningTeamId,
+          playerId: winningTeamId,
+          timestamp: new Date().toISOString()
+        }
+      })
+    ])
+
+    // Create a new match with rotated teams
+    const newTeams = {
+      homeTeamId: winningTeamId,         // Winner stays as home team
+      awayTeamId: currentMatch.waitingTeamId,   // Waiting team becomes away team
+      waitingTeamId: losingTeamId,       // Losing team becomes waiting team
+    }
+
+    // Validate that all team IDs are unique
+    const teamIds = Object.values(newTeams)
+    if (new Set(teamIds).size !== teamIds.length) {
+      return new NextResponse("Invalid team rotation: Teams must be unique", { status: 400 })
+    }
+
+    const newMatch = await prisma.match.create({
       data: {
-        homeTeamId: winningTeamId,         // Winner stays as home team
-        awayTeamId: match.waitingTeamId,   // Waiting team becomes away team
-        waitingTeamId: losingTeamId        // Losing team becomes waiting team
+        fixtureId: fixture.id,
+        ...newTeams,
+        status: "IN_PROGRESS"
       },
       include: {
         homeTeam: {
@@ -97,11 +132,67 @@ export async function POST(
               }
             }
           }
+        },
+        events: {
+          include: {
+            player: true,
+            assistPlayer: true
+          }
         }
       }
     })
 
-    return NextResponse.json(updatedMatch)
+    // Return both the new match and updated fixture
+    const updatedFixture = await prisma.fixture.findUnique({
+      where: { id: fixture.id },
+      include: {
+        matches: {
+          include: {
+            homeTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            awayTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            waitingTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            events: {
+              orderBy: {
+                timestamp: 'desc'
+              },
+              include: {
+                player: true,
+                assistPlayer: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    })
+
+    return NextResponse.json({ match: newMatch, fixture: updatedFixture })
   } catch (error) {
     console.error("[ROTATE_POST]", error)
     return new NextResponse(

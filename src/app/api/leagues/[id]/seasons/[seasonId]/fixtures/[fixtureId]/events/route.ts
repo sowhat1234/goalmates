@@ -16,6 +16,7 @@ const createEventSchema = z.object({
   matchId: z.string(),
   timestamp: z.string().optional(),
   team: z.string(),
+  assistPlayerId: z.string().optional(),
 })
 
 export async function POST(
@@ -118,6 +119,7 @@ export async function POST(
         matchId: body.matchId,
         timestamp: body.timestamp ? new Date(body.timestamp) : new Date(),
         team: body.team,
+        assistPlayerId: body.assistPlayerId,
       },
       include: {
         player: true,

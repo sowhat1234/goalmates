@@ -11,6 +11,7 @@ type RouteParams = Promise<{
 
 interface EventData {
   type: string;
+  assistPlayerId?: string | null;
 }
 
 export async function GET(
@@ -60,7 +61,7 @@ export async function GET(
 
     const stats = {
       goals: events.filter((e: EventData) => e.type === "GOAL").length,
-      assists: events.filter((e: EventData) => e.type === "ASSIST").length,
+      assists: events.filter((e: EventData) => e.assistPlayerId === playerId).length,
       saves: events.filter((e: EventData) => e.type === "SAVE").length,
       yellowCards: events.filter((e: EventData)  => e.type === "YELLOW_CARD").length,
       redCards: events.filter((e: EventData) => e.type === "RED_CARD").length,

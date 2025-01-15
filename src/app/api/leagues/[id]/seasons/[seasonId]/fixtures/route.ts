@@ -148,7 +148,7 @@ export async function POST(
       data: {
         date: new Date(body.date),
         seasonId,
-        status: "WAITING_TO_START",
+        status: "NOT_STARTED",
         matches: {
           create: [{
             homeTeam: {
