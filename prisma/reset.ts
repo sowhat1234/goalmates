@@ -4,7 +4,14 @@ const prisma = new PrismaClient()
 
 async function resetDatabase() {
   try {
-    // Delete in correct order to respect relationships
+    // Delete events first since they have a required relation with matches
+    console.log('🗑️ Deleting events...')
+    await prisma.event.deleteMany()
+
+    // Then delete matches which have team relationships
+    console.log('🗑️ Deleting matches...')
+    await prisma.match.deleteMany()
+
     console.log('🗑️ Deleting player teams...')
     await prisma.playerTeam.deleteMany()
 
@@ -13,12 +20,6 @@ async function resetDatabase() {
     
     console.log('🗑️ Deleting players...')
     await prisma.player.deleteMany()
-    
-    console.log('🗑️ Deleting events...')
-    await prisma.event.deleteMany()
-    
-    console.log('🗑️ Deleting matches...')
-    await prisma.match.deleteMany()
     
     console.log('🗑️ Deleting fixtures...')
     await prisma.fixture.deleteMany()
@@ -44,7 +45,6 @@ async function resetDatabase() {
     console.log('✅ Database reset successful')
   } catch (error) {
     console.error('Error resetting database:', error)
-    // Log the full error for debugging
     if (error instanceof Error) {
       console.error('Full error:', JSON.stringify(error, null, 2))
     }
