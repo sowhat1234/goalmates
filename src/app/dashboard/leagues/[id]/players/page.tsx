@@ -157,7 +157,7 @@ export default function PlayersPage() {
                         {player.name}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {player.user.email}
+                        {player.user?.email || 'No email'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

@@ -14,6 +14,9 @@ type DashboardStats = {
     leagueName: string
     seasonName: string
     result: string
+    leagueId: string
+    seasonId: string
+    fixtureId: string
   }>
   upcomingFixtures: Array<{
     id: string
@@ -167,7 +170,7 @@ export default function DashboardPage() {
                 <ul className="-my-5 divide-y divide-gray-200">
                   {stats.recentMatches.map((match) => (
                     <li key={match.id} className="py-4">
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center justify-between space-x-4">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">
                             {match.leagueName} - {match.seasonName}
@@ -176,10 +179,16 @@ export default function DashboardPage() {
                             {new Date(match.date).toLocaleDateString()}
                           </p>
                         </div>
-                        <div>
+                        <div className="flex items-center space-x-3">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             {match.result}
                           </span>
+                          <Link
+                            href={`/dashboard/leagues/${match.leagueId}/seasons/${match.seasonId}/fixtures/${match.fixtureId}`}
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                          >
+                            View Fixture
+                          </Link>
                         </div>
                       </div>
                     </li>

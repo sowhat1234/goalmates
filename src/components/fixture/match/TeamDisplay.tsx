@@ -19,21 +19,32 @@ export function TeamDisplay({ team, events, currentMatchId, isWaiting, className
   const currentEvents = getCurrentPlayEvents(events, team.id, currentMatchId)
 
   return (
-    <div className={`relative ${className}`}>
-      <div className="flex flex-col items-center">
+    <div className={`flex flex-col h-full ${className}`}>
+      {/* Team Header */}
+      <div className="flex flex-col items-center pb-3">
         <FaTshirt 
-          className={`w-16 h-16 ${isWaiting ? 'opacity-70' : ''}`}
+          className={`w-12 h-12 sm:w-16 sm:h-16 ${isWaiting ? 'opacity-70' : ''}`}
           style={{ 
             fill: getTeamColor(team).fill,
           }} 
         />
-        <h3 className={`text-lg font-semibold mt-2 ${getTeamColor(team).text}`}>{team.name}</h3>
+        <h3 className={`text-base sm:text-lg font-semibold mt-2 ${getTeamColor(team).text}`}>
+          {team.name}
+        </h3>
       </div>
 
+      {/* Events Section */}
       {!isWaiting && (
-        <div className="mt-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">Current Play Events</h4>
-          <EventList events={currentEvents} className="max-h-[150px] overflow-y-auto" />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <h4 className="text-sm font-medium text-gray-700 mb-2">
+            Current Play Events
+          </h4>
+          <div className="flex-1 overflow-y-auto mb-2 -mx-2 px-2">
+            <EventList 
+              events={currentEvents} 
+              className="space-y-2" 
+            />
+          </div>
         </div>
       )}
     </div>

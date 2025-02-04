@@ -77,7 +77,7 @@ export default function LeaguePage() {
         }
       })
 
-      const response = await fetch(`/api/leagues/${params.id}/join/${requestId}`, {
+      const response = await fetch(`/api/leagues/${params.id}/join-requests/${requestId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

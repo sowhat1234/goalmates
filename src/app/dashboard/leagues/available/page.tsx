@@ -20,28 +20,33 @@ type League = {
 export default function AvailableLeaguesPage() {
   const { data: session } = useSession()
   const [leagues, setLeagues] = useState<League[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [joiningLeagueId, setJoiningLeagueId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchAvailableLeagues = async () => {
+    const fetchLeagues = async () => {
       try {
-        setIsLoading(true)
+        console.log('Fetching leagues with session:', session?.user)
+        
         const response = await fetch('/api/leagues/available')
-        if (!response.ok) throw new Error('Failed to fetch available leagues')
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
         const data = await response.json()
-        setLeagues(Array.isArray(data) ? data : [])
+        
+        console.log('Available leagues response:', data)
+        setLeagues(data)
       } catch (error) {
-        console.error('Error fetching available leagues:', error)
-        setError(error instanceof Error ? error.message : 'Failed to fetch available leagues')
+        console.error('Error fetching leagues:', error)
+        setError('Failed to fetch leagues')
       } finally {
-        setIsLoading(false)
+        setLoading(false)
       }
     }
 
     if (session?.user) {
-      fetchAvailableLeagues()
+      fetchLeagues()
     }
   }, [session])
 
@@ -72,13 +77,13 @@ export default function AvailableLeaguesPage() {
       ))
     } catch (error) {
       console.error('Error sending join request:', error)
-      setError(error instanceof Error ? error.message : 'Failed to send join request. Please try again.')
+      setError(error instanceof Error ? error.message : 'Failed to send join request')
     } finally {
       setJoiningLeagueId(null)
     }
   }
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
@@ -97,7 +102,7 @@ export default function AvailableLeaguesPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Available Leagues</h1>
+      <h1 className="text-2xl font-bold mb-2 text-gray-900">Available Leagues</h1>
       <p className="text-gray-600 mb-8">Browse and join available leagues in your area</p>
 
       {leagues.length === 0 ? (
@@ -106,22 +111,26 @@ export default function AvailableLeaguesPage() {
           <p className="mt-2 text-sm text-gray-500">There are currently no leagues available to join.</p>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {leagues.map((league) => (
-            <div key={league.id} className="bg-white rounded-lg shadow p-6">
+            <div
+              key={league.id}
+              className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+            >
               <h3 className="text-lg font-medium text-gray-900">{league.name}</h3>
               {league.description && (
-                <p className="mt-2 text-sm text-gray-600">{league.description}</p>
+                <p className="mt-2 text-sm text-gray-500">{league.description}</p>
               )}
-              <div className="mt-4 text-sm text-gray-500">
+              <div className="mt-4 flex flex-col space-y-2 text-sm text-gray-500">
                 <p>Managed by {league.owner.name || "Unknown"}</p>
-                <p className="mt-1">{league._count.players} active players</p>
-              </div>
-              {league.hasPendingRequest ? (
-                <div className="mt-4 text-sm text-yellow-800 border border-yellow-300 bg-yellow-50 rounded-md p-2 text-center">
-                  Request Pending
+                <div className="flex space-x-4">
+                  <span>{league._count.players} players</span>
+                  {league.hasPendingRequest && (
+                    <span className="text-blue-600">Join Request Pending</span>
+                  )}
                 </div>
-              ) : (
+              </div>
+              {!league.hasPendingRequest && (
                 <button
                   onClick={() => handleJoinRequest(league.id)}
                   disabled={joiningLeagueId === league.id}

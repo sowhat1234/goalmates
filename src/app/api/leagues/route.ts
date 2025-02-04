@@ -10,6 +10,15 @@ export async function POST(request: Request) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
+    // Verify user exists in database
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id }
+    })
+
+    if (!user) {
+      return new NextResponse("User not found", { status: 404 })
+    }
+
     const json = await request.json()
     const { name, description } = json
 
@@ -21,12 +30,38 @@ export async function POST(request: Request) {
       return new NextResponse("Invalid description", { status: 400 })
     }
 
-    const league = await prisma.league.create({
-      data: {
-        name,
-        description,
-        ownerId: session.user.id,
-      },
+    // Create league and add owner as a player in a transaction
+    const league = await prisma.$transaction(async (tx) => {
+      // Create the league
+      const newLeague = await tx.league.create({
+        data: {
+          name,
+          description,
+          ownerId: session.user.id,
+        }
+      })
+
+      // Create a player record for the owner
+      await tx.player.create({
+        data: {
+          name: user.name || 'League Owner',
+          userId: session.user.id,
+          leagueId: newLeague.id
+        }
+      })
+
+      // Return the league with owner info
+      return await tx.league.findUnique({
+        where: { id: newLeague.id },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      })
     })
 
     return NextResponse.json(league)
@@ -48,6 +83,15 @@ export async function GET() {
 
     console.log("[LEAGUES_GET] Fetching leagues for user:", session.user.id)
 
+    // First verify if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id }
+    })
+
+    if (!user) {
+      return new NextResponse("User not found", { status: 404 })
+    }
+
     // If user is admin, show all leagues
     const isAdmin = session.user.role === 'ADMIN'
     const leagues = await prisma.league.findMany({
@@ -66,6 +110,7 @@ export async function GET() {
       include: {
         owner: {
           select: {
+            id: true,
             name: true,
           },
         },
@@ -83,7 +128,10 @@ export async function GET() {
 
     console.log("[LEAGUES_GET] Found leagues:", leagues)
 
-    return NextResponse.json(leagues)
+    // Filter out leagues where owner is null
+    const validLeagues = leagues.filter(league => league.owner !== null)
+
+    return NextResponse.json(validLeagues)
   } catch (error) {
     console.error("[LEAGUES_GET] Error:", error)
     return new NextResponse("Internal Error", { status: 500 })

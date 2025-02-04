@@ -74,14 +74,22 @@ export default function LeaguesPage() {
         <h1 className="text-2xl font-bold text-gray-900">
           {canCreateLeague ? 'League Management' : 'My Leagues'}
         </h1>
-        {canCreateLeague && (
+        <div className="flex gap-3">
           <Link
-            href="/dashboard/leagues/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            href="/dashboard/leagues/available"
+            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            Create League
+            Find More Leagues
           </Link>
-        )}
+          {canCreateLeague && (
+            <Link
+              href="/dashboard/leagues/new"
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Create League
+            </Link>
+          )}
+        </div>
       </div>
 
       {!leagues || leagues.length === 0 ? (

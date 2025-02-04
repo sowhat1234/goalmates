@@ -48,7 +48,8 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
     handleStartMatch,
     handleEndFixture,
     handleWinningTeam,
-    checkWinConditions
+    checkWinConditions,
+    // we deleted the function - to hide setShowEventModal
   } = useFixtureState({ 
     initialFixture: fixture, 
     id, 
@@ -70,7 +71,8 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
     startTimer,
     pauseTimer,
     setOvertimeTimer,
-    adjustTime
+    adjustTime,
+    resetTimer
   } = useFixtureTimer({
     fixtureId,
     onTimeEnd: () => {
@@ -177,10 +179,10 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
   ]
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
-          <div className="flex flex-col space-y-4 mb-6">
+        <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6">
+          <div className="flex flex-col space-y-4 mb-4 sm:mb-6">
             {(fixture.status === 'IN_PROGRESS' || fixture.status === 'COMPLETED') && (
               <>
                 <div className="flex flex-col items-center space-y-4">
@@ -203,38 +205,42 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
             )}
           </div>
 
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <TeamDisplay
-                  team={activeMatch.homeTeam}
-                  events={activeMatch.events}
-                  currentMatchId={activeMatch.id}
-                  onRecordEvent={() => fixtureEvents.handleOpenEventModal(activeMatch.homeTeam.id)}
-                  className="h-full"
-                />
+          <div className="space-y-6 sm:space-y-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div className="bg-gray-50 rounded-lg p-3 sm:p-4 flex flex-col">
+                <div className="flex-1 overflow-hidden">
+                  <TeamDisplay
+                    team={activeMatch.homeTeam}
+                    events={activeMatch.events}
+                    currentMatchId={activeMatch.id}
+                    onRecordEvent={() => fixtureEvents.handleOpenEventModal(activeMatch.homeTeam.id)}
+                    className="h-full"
+                  />
+                </div>
                 {fixture.status === 'IN_PROGRESS' && (
                   <button
                     onClick={() => fixtureEvents.handleOpenEventModal(activeMatch.homeTeam.id)}
-                    className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                    className="w-full mt-3 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                   >
                     Record Event
                   </button>
                 )}
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4">
-                <TeamDisplay
-                  team={activeMatch.awayTeam}
-                  events={activeMatch.events}
-                  currentMatchId={activeMatch.id}
-                  onRecordEvent={() => fixtureEvents.handleOpenEventModal(activeMatch.awayTeam.id)}
-                  className="h-full"
-                />
+              <div className="bg-gray-50 rounded-lg p-3 sm:p-4 flex flex-col">
+                <div className="flex-1 overflow-hidden">
+                  <TeamDisplay
+                    team={activeMatch.awayTeam}
+                    events={activeMatch.events}
+                    currentMatchId={activeMatch.id}
+                    onRecordEvent={() => fixtureEvents.handleOpenEventModal(activeMatch.awayTeam.id)}
+                    className="h-full"
+                  />
+                </div>
                 {fixture.status === 'IN_PROGRESS' && (
                   <button
                     onClick={() => fixtureEvents.handleOpenEventModal(activeMatch.awayTeam.id)}
-                    className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                    className="w-full mt-3 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                   >
                     Record Event
                   </button>
@@ -243,8 +249,8 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
             </div>
 
             {activeMatch.waitingTeam && (
-              <div className="mt-6">
-                <div className="relative">
+              <div className="mt-6 relative">
+                <div className="relative mb-6">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-gray-300"></div>
                   </div>
@@ -253,21 +259,23 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
                   </div>
                 </div>
 
-                <div className="mt-4 bg-gray-50 rounded-lg p-4">
-                  <TeamDisplay
-                    team={activeMatch.waitingTeam}
-                    events={[]}
-                    currentMatchId={activeMatch.id}
-                    onRecordEvent={() => {}}
-                    isWaiting={true}
-                    className="h-full"
-                  />
+                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 flex flex-col">
+                  <div className="flex-1 overflow-hidden">
+                    <TeamDisplay
+                      team={activeMatch.waitingTeam}
+                      events={[]}
+                      currentMatchId={activeMatch.id}
+                      onRecordEvent={() => {}}
+                      isWaiting={true}
+                      className="h-full"
+                    />
+                  </div>
                 </div>
               </div>
             )}
 
             {activeMatch.status === 'IN_PROGRESS' && (
-              <div className="grid grid-cols-1 gap-6 sm:gap-8">
+              <div className="grid grid-cols-1 gap-4 sm:gap-8 mt-6">
                 <TeamStats 
                   teams={[activeMatch.homeTeam, activeMatch.awayTeam, activeMatch.waitingTeam]} 
                   events={fixture.matches.flatMap(m => m.events)} 
@@ -284,26 +292,21 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
         {fixture.status === 'NOT_STARTED' && (
           <button
             onClick={handleMatchStart}
-            className="w-full mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors text-lg font-semibold"
+            className="w-full mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors text-base sm:text-lg font-semibold"
           >
             Start Match
           </button>
         )}
 
         {fixture.status === 'IN_PROGRESS' && (
-          <MatchActions
-            onEndMatch={() => setShowWinnerSelectionPrompt(true)}
-            onEndFixture={async () => {
-              await handleEndFixture();
-              // Force a re-render by updating the fixture status locally
-              fixture.status = 'COMPLETED';
-              if (activeMatch) {
-                activeMatch.status = 'COMPLETED';
-              }
-              // Force re-render
-              setLocalError(null);
-            }}
-          />
+          <div className="fixed bottom-0 left-0 right-0 p-3 bg-white border-t border-gray-200 shadow-lg sm:relative sm:mt-4 sm:p-0 sm:bg-transparent sm:border-0 sm:shadow-none">
+            <div>
+              <MatchActions
+                onEndMatch={() => setShowWinnerSelectionPrompt(true)}
+                onEndFixture={handleEndFixture}
+              />
+            </div>
+          </div>
         )}
 
         <EventModal
@@ -314,10 +317,9 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
             try {
               console.log('Submitting event:', event)
               await fixtureEvents.handleRecordEvent(event)
-              // Update state locally instead of reloading
               const now = new Date().toISOString()
               const newEvent: Event = {
-                id: Date.now().toString(), // Temporary ID until server sync
+                id: Date.now().toString(),
                 type: event.type,
                 playerId: event.player?.id || '',
                 matchId: activeMatch.id,
@@ -343,14 +345,13 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
 
         {showWinnerSelectionPrompt && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-              <h3 className="text-lg font-semibold mb-4">Select Winner</h3>
-              <div className="space-y-4">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">Select Winner</h3>
+              <div className="space-y-3">
                 {[activeMatch.homeTeam, activeMatch.awayTeam, activeMatch.waitingTeam].filter(Boolean).map((team) => (
                   <button
                     key={team.id}
                     onClick={async () => {
-                      // Determine the losing team based on which team won
                       let losingTeams;
                       if (team.id === activeMatch.homeTeam.id) {
                         losingTeams = [activeMatch.awayTeam, activeMatch.waitingTeam];
@@ -360,25 +361,24 @@ export function FixtureClient({ fixture, id, seasonId, fixtureId, events }: Fixt
                         losingTeams = [activeMatch.homeTeam, activeMatch.awayTeam];
                       }
                       
-                      // The first losing team becomes the next away team
                       const losingTeam = losingTeams[0];
-                      await handleWinningTeam(team.id, losingTeam.id);
-                      // Refresh the page to show the new match state
-                      window.location.reload();
+                      
+                      try {
+                        resetTimer();
+                        await handleWinningTeam(team.id, losingTeam.id);
+                        window.location.reload();
+                      } catch (error) {
+                        console.error('Error handling winner:', error);
+                        setLocalError('Failed to process winner selection. Please try again.');
+                      }
                     }}
-                    className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700"
+                    className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 text-sm sm:text-base"
                   >
                     <FaTshirt style={{ color: getTeamColor(team).fill }} />
                     <span>{team.name}</span>
                   </button>
                 ))}
               </div>
-              <button
-                onClick={() => setShowWinnerSelectionPrompt(false)}
-                className="w-full mt-4 bg-gray-200 text-gray-800 px-4 py-3 rounded-lg hover:bg-gray-300"
-              >
-                Cancel
-              </button>
             </div>
           </div>
         )}

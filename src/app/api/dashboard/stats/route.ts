@@ -45,6 +45,17 @@ export async function GET() {
               take: 5,
               orderBy: {
                 createdAt: 'desc'
+              },
+              include: {
+                match: {
+                  include: {
+                    fixture: {
+                      include: {
+                        season: true
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -80,8 +91,11 @@ export async function GET() {
           id: event.id,
           date: event.timestamp,
           leagueName: league.name,
-          seasonName: 'Current Season', // We can update this when we implement seasons
-          result: event.type // This will show the event type (GOAL, ASSIST, etc.)
+          seasonName: event.match?.fixture?.season?.name || 'Current Season',
+          result: event.type,
+          leagueId: league.id,
+          seasonId: event.match?.fixture?.season?.id,
+          fixtureId: event.match?.fixture?.id
         }))
       )
     )

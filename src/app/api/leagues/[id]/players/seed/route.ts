@@ -31,47 +31,63 @@ export async function POST(
       return new NextResponse("Not Found", { status: 404 })
     }
 
-    // Create 15 mock players
     const mockPlayers = [
-      "Asaf",
-      "Nissim",
-      "Oren Abudi",
-      "Yuval M",
-      "Avi",
-      "Golan",
-      "Tal Ben Ari",
-      "Nir",
-      "Ofer",
-      "Ran",
-      "Matan",
-      "Hari",
-      "Iezra",
-      "Eyal",
-      "Dan Shemesh",
-      "Amit Shamiss",
-      "Avi Shem-tov",
-      "Doron",
-      "Eliav",
-      "Mazorya",
-      "Omer",
-      "Alon Shalil",
-      "Itzik",
-      "Hagi",
-      "Asaf Karavany"
+      { name: "Asaf", email: "asaf@example.com" },
+      { name: "Nissim", email: "nissim@example.com" },
+      { name: "Oren Abudi", email: "oren@example.com" },
+      { name: "Yuval M", email: "yuval@example.com" },
+      { name: "Avi", email: "avi@example.com" },
+      { name: "Golan", email: "golan@example.com" },
+      { name: "Tal Ben Ari", email: "tal@example.com" },
+      { name: "Nir", email: "nir@example.com" },
+      { name: "Ofer", email: "ofer@example.com" },
+      { name: "Ran", email: "ran@example.com" },
+      { name: "Matan", email: "matan@example.com" },
+      { name: "Hari", email: "hari@example.com" },
+      { name: "Iezra", email: "iezra@example.com" },
+      { name: "Eyal", email: "eyal@example.com" },
+      { name: "Dan Shemesh", email: "dan@example.com" },
+      { name: "Amit Shamiss", email: "amit@example.com" },
+      { name: "Avi Shem-tov", email: "avist@example.com" },
+      { name: "Doron", email: "doron@example.com" },
+      { name: "Eliav", email: "eliav@example.com" },
+      { name: "Mazorya", email: "mazorya@example.com" },
+      { name: "Omer", email: "omer@example.com" },
+      { name: "Alon Shalil", email: "alon@example.com" },
+      { name: "Itzik", email: "itzik@example.com" },
+      { name: "Hagi", email: "hagi@example.com" },
+      { name: "Asaf Karavany", email: "asafk@example.com" }
     ]
 
-    const players = await Promise.all(
-      mockPlayers.map((name) =>
-        prisma.player.create({
+    // Create users and players in transaction
+    const createdPlayers = await Promise.all(
+      mockPlayers.map(async (playerData) => {
+        // Create user first
+        const user = await prisma.user.create({
           data: {
-            name,
+            name: playerData.name,
+            email: playerData.email,
+            role: 'USER',
+          }
+        })
+
+        // Then create player linked to the user
+        const player = await prisma.player.create({
+          data: {
+            name: playerData.name,
+            userId: user.id,
             leagueId: id,
           },
+          include: {
+            user: true
+          }
         })
-      )
+
+        return player
+      })
     )
 
-    return NextResponse.json(players)
+    return NextResponse.json(createdPlayers)
   } catch (error) {
     console.error("[PLAYERS_SEED]", error)
     return new NextResponse("Internal Error", { status: 500 })

@@ -10,72 +10,26 @@ export async function GET() {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    // Debug session
-    console.log('Debug - Session:', {
-      id: session.user.id,
-      email: session.user.email,
-      role: session.user.role
-    })
-
-    // First get user from database to verify role
-    const dbUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        email: true,
-        role: true
-      }
-    })
-
-    console.log('Debug - DB User:', dbUser)
-
-    // First get all leagues for debugging
+    // First get ALL leagues to see what exists
     const allLeagues = await prisma.league.findMany({
       include: {
-        owner: {
-          select: {
-            name: true,
-          },
-        },
-        players: {
-          where: {
-            userId: session.user.id
-          }
-        },
-        joinRequests: {
-          where: {
-            userId: session.user.id
-          }
-        }
+        owner: true,
+        players: true
       }
     })
 
-    console.log('Debug - All Leagues:', allLeagues.map(l => ({
-      id: l.id,
-      name: l.name,
-      isOwner: l.ownerId === session.user.id,
-      isPlayer: l.players.length > 0,
-      joinRequests: l.joinRequests.map(jr => jr.status)
-    })))
+    console.log('All leagues in database:', allLeagues)
 
-    // Simplified query to show available leagues
-    const leagues = await prisma.league.findMany({
+    // Get leagues available to join
+    const availableLeagues = await prisma.league.findMany({
       where: {
-        AND: [
-          // Not owned by current user
-          { ownerId: { not: session.user.id } },
-          // User is not a player
-          { players: { none: { userId: session.user.id } } },
-          // No accepted or pending requests
-          {
-            joinRequests: {
-              none: {
-                userId: session.user.id,
-                status: { in: ['ACCEPTED', 'PENDING'] }
-              }
+        NOT: {
+          players: {
+            some: {
+              userId: session.user.id
             }
           }
-        ]
+        }
       },
       include: {
         owner: {
@@ -83,10 +37,11 @@ export async function GET() {
             name: true,
           },
         },
-        players: {
-          select: {
-            id: true,
-          },
+        players: true,
+        joinRequests: {
+          where: {
+            userId: session.user.id
+          }
         },
         _count: {
           select: {
@@ -96,12 +51,24 @@ export async function GET() {
       },
     })
 
-    console.log('Debug - Available Leagues:', leagues.map(l => ({
-      id: l.id,
-      name: l.name
-    })))
+    console.log('Available leagues before transform:', availableLeagues)
 
-    return NextResponse.json(leagues)
+    // Transform the response
+    const transformedLeagues = availableLeagues.map(league => ({
+      id: league.id,
+      name: league.name,
+      description: league.description,
+      owner: {
+        name: league.owner?.name
+      },
+      players: league.players,
+      hasPendingRequest: league.joinRequests.some(jr => jr.status === 'PENDING'),
+      _count: {
+        players: league._count.players
+      }
+    }))
+
+    return NextResponse.json(transformedLeagues)
   } catch (error) {
     console.error("Error fetching available leagues:", error)
     return new NextResponse("Internal Server Error", { status: 500 })

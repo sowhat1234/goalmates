@@ -113,12 +113,32 @@ export function useFixtureEvents({
       return
     }
 
+    if (teamId === 'global') {
+      // Handle global event case
+      const allPlayers = [
+        ...(match.homeTeam?.players || []),
+        ...(match.awayTeam?.players || []),
+        ...(match.waitingTeam?.players || [])
+      ]
+      
+      const combinedTeam = {
+        id: 'global',
+        name: 'All Teams',
+        players: allPlayers,
+      }
+      
+      setSelectedEvent({
+        type: 'GOAL',
+        team: combinedTeam,
+        player: allPlayers[0]?.player || { id: '', name: '' }
+      })
+      setShowEventModal(true)
+      return
+    }
+
     const team = [match.homeTeam, match.awayTeam, match.waitingTeam].filter(Boolean).find(t => t?.id === teamId)
-    console.log('Selected team full data:', JSON.stringify(team, null, 2))
     
     if (team && team.players && team.players.length > 0) {
-      console.log('Team players full data:', JSON.stringify(team.players, null, 2))
-      
       // Create a deep copy of the team data
       const teamCopy = {
         id: team.id,
@@ -142,7 +162,6 @@ export function useFixtureEvents({
         }
       }
       
-      console.log('Setting new event:', JSON.stringify(newEvent, null, 2))
       setSelectedEvent(newEvent)
       setShowEventModal(true)
     } else {
@@ -161,6 +180,7 @@ export function useFixtureEvents({
 
   return {
     showEventModal,
+    setShowEventModal,
     selectedEvent,
     handleRecordEvent,
     handleOpenEventModal,

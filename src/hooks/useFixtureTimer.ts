@@ -40,6 +40,22 @@ export function useFixtureTimer({ fixtureId, onTimeEnd }: UseFixtureTimerProps) 
     }
   }, [timer, fixtureId])
 
+  const resetTimer = useCallback(() => {
+    setTimer({
+      minutes: 0,
+      seconds: 0,
+      isRunning: false
+    })
+    setIsOvertime(false)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`fixture_timer_${fixtureId}`, JSON.stringify({
+        minutes: 0,
+        seconds: 0,
+        isRunning: false
+      }))
+    }
+  }, [fixtureId])
+
   const adjustTime = useCallback((secondsToAdd: number) => {
     setTimer(prevTimer => {
       let newSeconds = prevTimer.seconds + secondsToAdd
@@ -128,6 +144,7 @@ export function useFixtureTimer({ fixtureId, onTimeEnd }: UseFixtureTimerProps) 
     startTimer,
     pauseTimer,
     setOvertimeTimer,
-    adjustTime
+    adjustTime,
+    resetTimer
   }
 } 

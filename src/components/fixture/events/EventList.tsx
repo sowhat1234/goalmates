@@ -32,18 +32,27 @@ export function EventList({ events, className = '' }: EventListProps) {
   };
 
   return (
-    <div className={className}>
-      {sortedEvents.map(event => (
-        <div key={event.id} className="text-sm text-gray-600 mb-2 bg-white p-2 rounded-md shadow-sm">
-          <span className="mr-2 text-lg">{EVENT_EMOJIS[event.type]}</span>
-          <span className="font-medium">{getPlayerName(event)}</span>
-          {event.type === 'GOAL' && event.assistPlayerId && (
-            <div className="ml-4">
-              <div className="text-gray-500">Assist by {getPlayerName(event, true)} 👟</div>
+    <div className={`${className} relative z-0`}>
+      <div className="space-y-2">
+        {sortedEvents.map(event => (
+          <div 
+            key={event.id} 
+            className="text-sm text-gray-600 bg-white p-2 rounded-md shadow-sm relative z-10"
+          >
+            <div className="flex items-start gap-2">
+              <span className="text-lg flex-shrink-0">{EVENT_EMOJIS[event.type]}</span>
+              <div className="min-w-0 flex-1">
+                <span className="font-medium block truncate">{getPlayerName(event)}</span>
+                {event.type === 'GOAL' && event.assistPlayerId && (
+                  <div className="text-gray-500 text-xs mt-1">
+                    Assist by {getPlayerName(event, true)} 👟
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
-      ))}
+          </div>
+        ))}
+      </div>
     </div>
   )
 } 
