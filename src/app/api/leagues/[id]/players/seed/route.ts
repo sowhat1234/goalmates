@@ -35,7 +35,7 @@ export async function POST(
       { name: "Asaf", email: "asaf@example.com" },
       { name: "Nissim", email: "nissim@example.com" },
       { name: "Oren Abudi", email: "oren@example.com" },
-      { name: "Yuval M", email: "yuval@example.com" },
+      { name: "Yuval", email: "yuval@example.com" },
       { name: "Avi", email: "avi@example.com" },
       { name: "Golan", email: "golan@example.com" },
       { name: "Tal Ben Ari", email: "tal@example.com" },

@@ -274,6 +274,8 @@ export default function NewFixturePage({
               {seeding ? "Adding Mock Players..." : "Add 15 Mock Players"}
             </button>
           </div>
+
+
         ) : (
           <div className="space-y-8">
             {/* Teams */}
