@@ -38,9 +38,33 @@ export async function POST(
       include: {
         matches: {
           include: {
-            homeTeam: true,
-            awayTeam: true,
-            waitingTeam: true
+            homeTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            awayTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            },
+            waitingTeam: {
+              include: {
+                players: {
+                  include: {
+                    player: true
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -64,7 +88,24 @@ export async function POST(
     const body = await req.json()
     const { winningTeamId, losingTeamId } = body
 
-    // First mark the current match as completed and create a WIN event
+    // Get the winning and losing teams' players
+    const winningTeam = currentMatch.homeTeam.id === winningTeamId 
+      ? currentMatch.homeTeam 
+      : currentMatch.awayTeam.id === winningTeamId 
+        ? currentMatch.awayTeam 
+        : currentMatch.waitingTeam
+
+    const losingTeam = currentMatch.homeTeam.id === losingTeamId
+      ? currentMatch.homeTeam
+      : currentMatch.awayTeam.id === losingTeamId
+        ? currentMatch.awayTeam
+        : currentMatch.waitingTeam
+
+    if (!winningTeam || !losingTeam) {
+      return new NextResponse("Teams not found", { status: 404 })
+    }
+
+    // First mark the current match as completed and create WIN/LOSS events for all players
     await prisma.$transaction([
       prisma.match.update({
         where: {
@@ -75,15 +116,32 @@ export async function POST(
           winningTeamId: winningTeamId
         }
       }),
-      prisma.event.create({
-        data: {
-          type: "WIN",
-          matchId: currentMatch.id,
-          team: winningTeamId,
-          playerId: winningTeamId,
-          timestamp: new Date().toISOString()
-        }
-      })
+      // Create a WIN event for each player on the winning team
+      ...winningTeam.players.map((teamPlayer: { player: { id: string } }) => 
+        prisma.event.create({
+          data: {
+            type: "MATCH_RESULT",
+            subType: "WIN",
+            matchId: currentMatch.id,
+            team: winningTeamId,
+            playerId: teamPlayer.player.id,
+            timestamp: new Date().toISOString()
+          }
+        })
+      ),
+      // Create a LOSS event for each player on the losing team
+      ...losingTeam.players.map((teamPlayer: { player: { id: string } }) => 
+        prisma.event.create({
+          data: {
+            type: "MATCH_RESULT",
+            subType: "LOSS",
+            matchId: currentMatch.id,
+            team: losingTeamId,
+            playerId: teamPlayer.player.id,
+            timestamp: new Date().toISOString()
+          }
+        })
+      )
     ])
 
     // Create a new match with rotated teams

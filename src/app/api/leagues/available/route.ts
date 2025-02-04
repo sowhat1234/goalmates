@@ -23,13 +23,22 @@ export async function GET() {
     // Get leagues available to join
     const availableLeagues = await prisma.league.findMany({
       where: {
-        NOT: {
-          players: {
-            some: {
-              userId: session.user.id
+        AND: [
+          {
+            NOT: {
+              players: {
+                some: {
+                  userId: session.user.id
+                }
+              }
+            }
+          },
+          {
+            NOT: {
+              ownerId: session.user.id
             }
           }
-        }
+        ]
       },
       include: {
         owner: {

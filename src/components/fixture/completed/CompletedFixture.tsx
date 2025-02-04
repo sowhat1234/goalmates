@@ -14,7 +14,7 @@ interface CompletedFixtureProps {
 
 export function CompletedFixture({ fixture, match }: CompletedFixtureProps) {
   // Find the winning team
-  const winningTeam = match.events.find(e => e.type === 'WIN')?.team
+  const winningTeam = match.events.find(e => e.type === 'MATCH_RESULT' && e.subType === 'WIN')?.team
   const winner = [match.homeTeam, match.awayTeam, match.waitingTeam]
     .find(team => team.id === winningTeam)
 
@@ -34,7 +34,7 @@ export function CompletedFixture({ fixture, match }: CompletedFixtureProps) {
   fixture.matches.forEach(match => {
     console.log('Processing match events:', match.events)
     match.events.forEach(event => {
-      if (event.type === 'WIN') {
+      if (event.type === 'MATCH_RESULT' && event.subType === 'WIN') {
         const currentWins = teamWins.get(event.team) || 0
         teamWins.set(event.team, currentWins + 1)
         console.log('Found WIN event:', { teamId: event.team, currentWins: currentWins + 1 })
@@ -47,13 +47,19 @@ export function CompletedFixture({ fixture, match }: CompletedFixtureProps) {
   })
 
   // Find team with most wins
-  let mostWinsTeam: { team: Team; wins: number } | null = null
+  interface TeamWithWins {
+    team: Team;
+    wins: number;
+  }
+  
+  let mostWinsTeam: TeamWithWins | null = null;
+  
   teamWins.forEach((wins, teamId) => {
-    const team = [match.homeTeam, match.awayTeam, match.waitingTeam].find(t => t?.id === teamId)
+    const team = [match.homeTeam, match.awayTeam, match.waitingTeam].find(t => t?.id === teamId);
     if (team && (!mostWinsTeam || wins > mostWinsTeam.wins)) {
-      mostWinsTeam = { team, wins }
+      mostWinsTeam = { team, wins };
     }
-  })
+  });
 
   console.log('Final teamWins Map:', Object.fromEntries(teamWins))
   console.log('mostWinsTeam:', mostWinsTeam)
@@ -151,8 +157,7 @@ export function CompletedFixture({ fixture, match }: CompletedFixtureProps) {
         
         {/* Teams Display */}
         <div className="mt-8 sm:mt-12 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-          {[match.homeTeam, match.awayTeam, match.waitingTeam].map((team: Team) => {
-            if (!team) return null;
+          {[match.homeTeam, match.awayTeam, match.waitingTeam].filter((team): team is Team => !!team).map((team) => {
             const goals = teamGoals.get(team.id) || 0
             const wins = teamWins.get(team.id) || 0
             

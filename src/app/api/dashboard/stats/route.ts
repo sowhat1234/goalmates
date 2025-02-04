@@ -30,6 +30,7 @@ export async function GET() {
         ]
       },
       include: {
+        owner: true,
         _count: {
           select: {
             players: true,
@@ -37,10 +38,8 @@ export async function GET() {
           }
         },
         players: {
-          where: {
-            userId: session.user.id
-          },
           include: {
+            user: true,
             events: {
               take: 5,
               orderBy: {
@@ -78,26 +77,47 @@ export async function GET() {
       }
     })
 
+    console.log("[DASHBOARD_STATS] User ID:", session.user.id)
+    console.log("[DASHBOARD_STATS] User Role:", session.user.role)
     console.log("[DASHBOARD_STATS] Found leagues:", leagues.length)
+    console.log("[DASHBOARD_STATS] League details:", leagues.map(l => ({
+      id: l.id,
+      name: l.name,
+      ownerId: l.ownerId,
+      ownerName: l.owner?.name,
+      playerCount: l._count.players,
+      players: l.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        userId: p.userId,
+        userName: p.user?.name
+      }))
+    })))
 
     // Calculate totals
     const totalLeagues = leagues.length
     const totalPlayers = leagues.reduce((acc, league) => acc + league._count.players, 0)
+    const totalMatches = leagues.reduce((acc, league) => 
+      acc + league.players.reduce((pAcc, player) => 
+        pAcc + player.events.length, 0
+      ), 0
+    )
 
     // Get user's matches through their player records
     const userMatches = leagues.flatMap(league => 
-      league.players.flatMap(player => 
-        player.events.map(event => ({
-          id: event.id,
-          date: event.timestamp,
-          leagueName: league.name,
-          seasonName: event.match?.fixture?.season?.name || 'Current Season',
-          result: event.type,
-          leagueId: league.id,
-          seasonId: event.match?.fixture?.season?.id,
-          fixtureId: event.match?.fixture?.id
-        }))
-      )
+      league.players.filter(player => player.userId === session.user.id)
+        .flatMap(player => 
+          player.events.map(event => ({
+            id: event.id,
+            date: event.timestamp,
+            leagueName: league.name,
+            seasonName: event.match?.fixture?.season?.name || 'Current Season',
+            result: event.type,
+            leagueId: league.id,
+            seasonId: event.match?.fixture?.season?.id,
+            fixtureId: event.match?.fixture?.id
+          }))
+        )
     )
 
     // Get upcoming fixtures
@@ -115,7 +135,7 @@ export async function GET() {
     const stats = {
       totalLeagues,
       totalPlayers,
-      totalMatches: userMatches.length,
+      totalMatches,
       recentMatches: userMatches.slice(0, 5),
       upcomingFixtures: upcomingFixtures.slice(0, 5)
     }

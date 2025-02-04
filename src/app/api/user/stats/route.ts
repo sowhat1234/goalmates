@@ -50,8 +50,8 @@ export async function GET() {
     const events = user.players.flatMap(player => player.events)
     
     // Calculate match participation (unique matches)
-    const uniqueMatches = new Set(events.map(event => event.matchId))
-    const totalMatches = uniqueMatches.size
+    const uniqueFixtures = new Set(events.map(event => event.match.fixtureId))
+    const totalMatches = uniqueFixtures.size
 
     // Calculate goals and assists
     const totalGoals = events.filter(event => event.type === "GOAL").length
@@ -60,21 +60,33 @@ export async function GET() {
     // Calculate win rate (if we have match results in events)
     const matchResults = events.filter(event => event.type === "MATCH_RESULT")
     const wins = matchResults.filter(event => event.subType === "WIN").length
-    const winRate = matchResults.length > 0 ? wins / matchResults.length : 0
+    const losses = matchResults.filter(event => event.subType === "LOSS").length
+    const totalGames = wins + losses
+    const winRate = totalGames > 0 ? wins / totalGames : 0
 
-    // Get recent matches (using match IDs to group events)
-    const recentMatchIds = Array.from(uniqueMatches).slice(0, 10)
-    const recentMatchEvents = events.filter(event => recentMatchIds.includes(event.matchId))
+    // Get recent fixtures (using fixture IDs to group events)
+    const recentFixtureIds = Array.from(uniqueFixtures).slice(0, 10)
+    const recentFixtureEvents = events.filter(event => recentFixtureIds.includes(event.match.fixtureId))
 
-    const recentMatches = recentMatchIds.map(matchId => {
-      const matchEvents = recentMatchEvents.filter(event => event.matchId === matchId)
-      const firstEvent = matchEvents[0] // Use first event to get match details
+    // Group events by fixture
+    const fixtureEventsMap = new Map()
+    recentFixtureEvents.forEach(event => {
+      const fixtureId = event.match.fixtureId
+      if (!fixtureEventsMap.has(fixtureId)) {
+        fixtureEventsMap.set(fixtureId, [])
+      }
+      fixtureEventsMap.get(fixtureId).push(event)
+    })
+
+    const recentMatches = Array.from(fixtureEventsMap.entries()).map(([fixtureId, fixtureEvents]) => {
+      const firstEvent = fixtureEvents[0] // Use first event to get fixture details
+      const matchResult = fixtureEvents.find((e: any) => e.type === "MATCH_RESULT")
       return {
-        id: matchId,
+        id: fixtureId,
         date: firstEvent.match.fixture.date,
         leagueName: firstEvent.match.fixture.season.league.name,
-        result: matchEvents.find(e => e.type === "MATCH_RESULT")?.subType || "UNKNOWN",
-        goals: matchEvents.filter(e => e.type === "GOAL").length
+        result: matchResult ? matchResult.subType : "COMPLETED",
+        goals: fixtureEvents.filter((e: any) => e.type === "GOAL").length
       }
     })
 

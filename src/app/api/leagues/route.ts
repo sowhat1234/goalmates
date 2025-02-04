@@ -32,6 +32,13 @@ export async function POST(request: Request) {
 
     // Create league and add owner as a player in a transaction
     const league = await prisma.$transaction(async (tx) => {
+      console.log("[LEAGUES_POST] Creating league with:", {
+        name,
+        description,
+        ownerId: session.user.id,
+        ownerName: user.name
+      })
+
       // Create the league
       const newLeague = await tx.league.create({
         data: {
@@ -41,8 +48,10 @@ export async function POST(request: Request) {
         }
       })
 
+      console.log("[LEAGUES_POST] Created league:", newLeague)
+
       // Create a player record for the owner
-      await tx.player.create({
+      const player = await tx.player.create({
         data: {
           name: user.name || 'League Owner',
           userId: session.user.id,
@@ -50,7 +59,9 @@ export async function POST(request: Request) {
         }
       })
 
-      // Return the league with owner info
+      console.log("[LEAGUES_POST] Created player for owner:", player)
+
+      // Return the league with owner info and player count
       return await tx.league.findUnique({
         where: { id: newLeague.id },
         include: {
@@ -59,9 +70,33 @@ export async function POST(request: Request) {
               id: true,
               name: true
             }
+          },
+          players: {
+            include: {
+              user: true
+            }
+          },
+          _count: {
+            select: {
+              players: true
+            }
           }
         }
       })
+    })
+
+    console.log("[LEAGUES_POST] Final league data:", {
+      id: league.id,
+      name: league.name,
+      ownerId: league.owner.id,
+      ownerName: league.owner.name,
+      playerCount: league._count.players,
+      players: league.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        userId: p.userId,
+        userName: p.user.name
+      }))
     })
 
     return NextResponse.json(league)

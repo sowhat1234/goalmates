@@ -30,6 +30,19 @@ const fetcher = async (url: string) => {
   return res.json()
 }
 
+const getStatusStyle = (result: string) => {
+  switch (result) {
+    case 'WIN':
+      return 'bg-green-100 text-green-800'
+    case 'LOSS':
+      return 'bg-red-100 text-red-800'
+    case 'COMPLETED':
+      return 'bg-blue-100 text-blue-800'
+    default:
+      return 'bg-yellow-100 text-yellow-800'
+  }
+}
+
 export default function PersonalStatsPage() {
   const { data: session } = useSession()
   const [activeTab, setActiveTab] = useState<"overview" | "matches" | "achievements">("overview")
@@ -132,13 +145,7 @@ export default function PersonalStatsPage() {
                         {new Date(match.date).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      match.result === 'WIN' 
-                        ? 'bg-green-100 text-green-800'
-                        : match.result === 'LOSS'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusStyle(match.result)}`}>
                       {match.result}
                     </span>
                   </div>
@@ -168,13 +175,7 @@ export default function PersonalStatsPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                      match.result === 'WIN' 
-                        ? 'bg-green-100 text-green-800'
-                        : match.result === 'LOSS'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
+                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusStyle(match.result)}`}>
                       {match.result}
                     </span>
                     {match.goals > 0 && (

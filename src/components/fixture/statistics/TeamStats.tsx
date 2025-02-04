@@ -21,7 +21,7 @@ export function TeamStats({ teams, events, currentMatchId }: TeamStatsProps) {
     return {
       goals: teamEvents.filter(e => e?.type === 'GOAL').length,
       saves: teamEvents.filter(e => e?.type === 'SAVE').length,
-      wins: teamEvents.filter(e => e?.type === 'WIN').length
+      wins: teamEvents.filter(e => e?.type === 'MATCH_RESULT' && e?.subType === 'WIN').length
     }
   }
 

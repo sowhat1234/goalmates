@@ -28,6 +28,7 @@ export interface Team {
 export interface Event {
   id: string
   type: string
+  subType?: 'WIN' | 'LOSS' | null
   playerId: string
   assistPlayerId?: string | null
   matchId: string

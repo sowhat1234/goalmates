@@ -38,9 +38,9 @@ export default function NewFixturePage({
   const [date, setDate] = useState("")
   const [players, setPlayers] = useState<Player[]>([])
   const [teams, setTeams] = useState<Team[]>([
-    { id: 'home', name: "Red Team", players: [], maxPlayers: 5, color: 'red' },
-    { id: 'away', name: "Blue Team", players: [], maxPlayers: 5, color: 'blue' },
-    { id: 'waiting', name: "Green Team", players: [], maxPlayers: 5, color: 'green' },
+    { id: 'home', name: "Red Team", players: [], maxPlayers: 15, color: 'red' },
+    { id: 'away', name: "Blue Team", players: [], maxPlayers: 15, color: 'blue' },
+    { id: 'waiting', name: "Green Team", players: [], maxPlayers: 15, color: 'green' },
   ])
   const [loading, setLoading] = useState(false)
   const [playersLoading, setPlayersLoading] = useState(true)
@@ -174,10 +174,10 @@ export default function NewFixturePage({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validate teams have correct number of players
-    const invalidTeam = teams.find(team => team.players.length !== team.maxPlayers)
+    // Validate teams have at least 1 player
+    const invalidTeam = teams.find(team => team.players.length === 0)
     if (invalidTeam) {
-      setError(`${invalidTeam.name} must have exactly ${invalidTeam.maxPlayers} players`)
+      setError(`${invalidTeam.name} must have at least 1 player`)
       return
     }
 
